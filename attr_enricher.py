@@ -31,7 +31,7 @@ import openai
 import pandas as pd
 from openai import AsyncOpenAI
 
-from config import DEFAULT_ATTRIBUTE_PROMPT, VISUAL_HINTS, ClassifierConfig
+from config import DEFAULT_ATTRIBUTE_PROMPT, ClassifierConfig
 from exporter import add_effective_columns
 from reference import ReferenceData, sap_codes, validate_choice
 from runcontrol import RunControl
@@ -70,19 +70,34 @@ def attach_packshots(work: pd.DataFrame, packshots: pd.DataFrame) -> pd.DataFram
 
 # ------------------------------------------------------------------ prompt
 
+PROMPT_FIELDS = ("brand", "product_name", "attribute_block")
+
+
+def check_attribute_prompt(template: str) -> str | None:
+    """Foutmelding als de prompt niet bruikbaar is, anders None."""
+    if "{attribute_block}" not in template:
+        return "De prompt moet {attribute_block} bevatten (daar komen de attributen en hun waarden)."
+    try:
+        template.format(**{f: "x" for f in PROMPT_FIELDS})
+    except (KeyError, IndexError, ValueError) as exc:
+        return (f"Ongeldige plaatshouder: {exc}. Gebruik alleen {{brand}}, {{product_name}} en "
+                "{attribute_block}; schrijf letterlijke accolades dubbel: {{ en }}.")
+    return None
+
+
 def build_prompt(cfg: ClassifierConfig, ref: ReferenceData, attrs: list[str],
                  brand: str, product_name: str) -> str:
     blocks = []
     for attr in attrs:
         name = ref.display_name(attr)
         rule = "multiple allowed (max 3)" if ref.is_multi(attr) else "exactly one"
-        hint = VISUAL_HINTS.get(attr)
+        hint = cfg.hint_for(attr)
         opts = "; ".join(ref.options_for(attr))
         blocks.append(f'- "{name}" ({rule}){": " + hint if hint else ""}\n  options: {opts}')
     fields = dict(brand=brand or "?", product_name=product_name or "?",
                   attribute_block="\n".join(blocks))
     try:
-        return cfg.attribute_prompt.format(**fields)
+        return cfg.active_attribute_prompt().format(**fields)
     except (KeyError, IndexError) as exc:
         logger.error("Ongeldige attribuutprompt (%s); standaardprompt gebruikt.", exc)
         return DEFAULT_ATTRIBUTE_PROMPT.format(**fields)

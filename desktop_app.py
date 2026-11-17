@@ -576,6 +576,9 @@ class MainWindow(QMainWindow):
         f.addRow("Beelddetail:", self.cb_detail)
         self.ed_catalog = QLineEdit(self.cfg.impex_catalog)
         f.addRow("Impex-catalogus:", self.ed_catalog)
+        btn_prompt = QPushButton("Prompts en uitleg per attribuut aanpassen…")
+        btn_prompt.clicked.connect(lambda: self.attr_tab.edit_prompts())
+        f.addRow("Prompts:", btn_prompt)
         lay.addWidget(g)
 
         g = QGroupBox("Packshot-review: sneltoetsen")

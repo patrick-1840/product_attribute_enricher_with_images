@@ -178,7 +178,7 @@ class ImageClassifier:
             "messages": [{
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": self.cfg.prompt},
+                    {"type": "text", "text": self.cfg.active_prompt()},
                     {"type": "image_url", "image_url": {
                         "url": f"data:image/jpeg;base64,{b64}", "detail": "low"}},
                 ],
