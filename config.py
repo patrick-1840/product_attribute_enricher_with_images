@@ -183,10 +183,12 @@ Rules:
 - Only choose from the listed options, spelled exactly as given.
 - For attributes marked "multiple allowed", return up to 3 options as a comma-separated string.
 - If an attribute cannot be determined from the image, set "choice" to null.
+- Give a confidence between 0 and 1 per attribute: how sure you are that the choice is
+  correct based on the image (1.0 = clearly visible, 0.5 = guess between options).
 - Give a brief motivation (max 1 sentence) per attribute.
 
 Answer ONLY with JSON, one key per attribute name exactly as listed:
-{{"<attribute>": {{"choice": "<option>" or null, "motivation": "..."}}, ...}}"""
+{{"<attribute>": {{"choice": "<option>" or null, "confidence": 0.0-1.0, "motivation": "..."}}, ...}}"""
 
 
 def _enricher_setting(key: str) -> Path | None:

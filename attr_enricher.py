@@ -103,9 +103,22 @@ def build_prompt(cfg: ClassifierConfig, ref: ReferenceData, attrs: list[str],
         return DEFAULT_ATTRIBUTE_PROMPT.format(**fields)
 
 
+def _confidence(value) -> float | None:
+    """0-1; ook "85%" of 85 wordt aanvaard. Ongeldig of ontbrekend → None."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        v = float(str(value).strip().rstrip("%"))
+    except ValueError:
+        return None
+    if v > 1:
+        v /= 100
+    return min(max(v, 0.0), 1.0)
+
+
 def parse_attribute_response(text: str, ref: ReferenceData, attrs: list[str]
-                             ) -> dict[str, tuple[object, str | None]]:
-    """{attribute_key: (ruwe keuze, motivatie)}; sleutels hoofdletterongevoelig."""
+                             ) -> dict[str, tuple[object, str | None, float | None]]:
+    """{attribute_key: (ruwe keuze, motivatie, zekerheid)}; sleutels hoofdletterongevoelig."""
     cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", (text or "").strip())
     try:
         data = json.loads(cleaned)
@@ -119,11 +132,12 @@ def parse_attribute_response(text: str, ref: ReferenceData, attrs: list[str]
     for attr in attrs:
         entry = by_lower.get(attr) or by_lower.get(ref.display_name(attr).lower())
         if isinstance(entry, dict):
-            out[attr] = (entry.get("choice"), entry.get("motivation"))
+            out[attr] = (entry.get("choice"), entry.get("motivation"),
+                         _confidence(entry.get("confidence")))
         elif entry is not None:
-            out[attr] = (entry, None)
+            out[attr] = (entry, None, None)
         else:
-            out[attr] = (None, "Attribuut ontbrak in het modelantwoord.")
+            out[attr] = (None, "Attribuut ontbrak in het modelantwoord.", None)
     return out
 
 
@@ -198,13 +212,14 @@ class AttributeEnricher:
                     try:
                         answers = await self._ask(pid, attrs, first, model)
                         for attr in attrs:
-                            raw, motivation = answers[attr]
+                            raw, motivation, conf = answers[attr]
                             value, valid = validate_choice(raw, self.ref.options_for(attr))
                             if value and not valid:
                                 motivation = (motivation or "") + " [waarde staat niet in de optielijst]"
                                 counts["invalid"] += 1
                             counts["values"] += bool(value)
-                            store.save_attr_result(pid, attr, url, value, valid, motivation, model)
+                            store.save_attr_result(pid, attr, url, value, valid, motivation, model,
+                                                   confidence=conf)
                         counts["ok"] += 1
                     except QuotaExceeded as exc:
                         logger.error("Geen OpenAI-tegoed meer; verrijking gestopt. %s", exc)
@@ -234,14 +249,15 @@ class AttributeEnricher:
             store.close()
 
     async def _ask(self, pid: str, attrs: list[str], row: pd.Series, model: str
-                   ) -> dict[str, tuple[object, str | None]]:
+                   ) -> dict[str, tuple[object, str | None, float | None]]:
         if not self.cfg.use_openai:
             await asyncio.sleep(random.uniform(0.01, 0.05))
             out = {}
             for attr in attrs:
                 opts = self.ref.options_for(attr)
                 choice = random.choice(opts) if opts and random.random() > 0.15 else None
-                out[attr] = (choice, "[SIMULATIE] willekeurige keuze")
+                out[attr] = (choice, "[SIMULATIE] willekeurige keuze",
+                             round(random.uniform(0.3, 1.0), 2) if choice else None)
             return out
 
         thumb = self.cfg.thumbs_dir / str(row["thumb"])
@@ -297,7 +313,8 @@ class AttributeEnricher:
 RESULT_COLUMNS = [
     "mainCategory", "brand", "productName", "productUrl", "variant_code", "baseProduct",
     "Product attribute", "attribute_key", "current value", "generated value", "new_sap_values",
-    "valid", "motivation", "model", "error", "approved", "packshot_url", "thumb", "fetch_status",
+    "valid", "confidence", "motivation", "model", "error", "approved", "packshot_url", "thumb",
+    "fetch_status",
 ]
 
 
@@ -316,6 +333,9 @@ def results_table(cfg: ClassifierConfig, ref: ReferenceData, work: pd.DataFrame)
     t["generated value"] = [e if isinstance(e, str) else (c if isinstance(c, str) else None)
                             for e, c in zip(t["edited_value"], t["choice"])]
     t["generated value"] = t["generated value"].replace("", None)
+    # Zekerheid hoort bij de MODELkeuze; na een manuele aanpassing niet meer van toepassing.
+    t["confidence"] = [None if isinstance(e, str) else c
+                       for e, c in zip(t["edited_value"], t["confidence"])]
     # Geldigheid altijd opnieuw bepalen: ook manuele aanpassingen moeten in de lijst staan.
     t["valid"] = [validate_choice(v, ref.options_for(a))[1]
                   for a, v in zip(t["attribute_key"], t["generated value"])]
@@ -336,7 +356,7 @@ def results_table(cfg: ClassifierConfig, ref: ReferenceData, work: pd.DataFrame)
 EXPORT_COLUMNS = [
     "mainCategory", "brand", "productName", "productUrl", "variant_code", "baseProduct",
     "new_sap_values", "Product attribute", "generated value", "current value",
-    "motivation", "packshot_url",
+    "confidence", "motivation", "packshot_url",
 ]
 
 

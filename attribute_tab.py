@@ -20,7 +20,7 @@ import html
 import logging
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QPixmap
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QFileDialog, QGroupBox, QHBoxLayout, QHeaderView, QLabel,
@@ -31,7 +31,9 @@ from PySide6.QtWidgets import (
 import pandas as pd
 
 from config import VISUAL_ATTRIBUTES, ClassifierConfig
-from qt_common import SORT_ROLE, SortableTableItem, SortableTreeItem, StepBox, enable_sorting
+from qt_common import (
+    SORT_ROLE, ExcelFilterHeader, SortableTableItem, SortableTreeItem, StepBox, enable_sorting,
+)
 from reference import CATEGORY_COLUMN, ReferenceData, fill_rates
 
 logger = logging.getLogger(__name__)
@@ -349,14 +351,19 @@ class AttributeTab(QWidget):
 
 # ======================================================================= resultaten
 
+def _conf_color(conf: float) -> str:
+    return "#1b8a3a" if conf >= 0.85 else ("#c77c00" if conf >= 0.6 else "#c0392b")
+
+
 class ResultsTab(QWidget):
     COLUMNS = [
         ("approved", "✅ export"), ("mainCategory", "Categorie"), ("brand", "Merk"),
         ("productName", "Product"), ("variant_code", "Variant"), ("Product attribute", "Attribuut"),
         ("current value", "Huidige waarde"), ("generated value", "Gegenereerde waarde"),
-        ("new_sap_values", "SAP-codes"), ("motivation", "Motivatie"),
+        ("confidence", "Zekerheid"), ("new_sap_values", "SAP-codes"), ("motivation", "Motivatie"),
     ]
-    VALUE_COL = 7
+    COL = {key: i for i, (key, _) in enumerate(COLUMNS)}
+    VALUE_COL = COL["generated value"]
 
     def __init__(self, cfg: ClassifierConfig, attr_tab: AttributeTab, host, parent=None):
         super().__init__(parent)
@@ -370,8 +377,10 @@ class ResultsTab(QWidget):
         self.f_attr = QComboBox()
         self.f_attr.addItem("alle attributen")
         self.f_status = QComboBox()
-        self.f_status.addItems(["met resultaat", "alleen niet in optielijst", "zonder waarde",
-                                "nog niet verwerkt", "alles"])
+        self.f_status.addItems(["met resultaat", "lage zekerheid (< drempel)",
+                                "alleen niet in optielijst", "zonder waarde", "nog niet verwerkt",
+                                "alles"])
+        self.f_status.setToolTip("Drempel = confidence-drempel bij Instellingen")
         btn = QPushButton("Vernieuwen")
         btn.clicked.connect(self.reload)
         self.f_attr.currentIndexChanged.connect(self._fill)
@@ -381,6 +390,8 @@ class ResultsTab(QWidget):
         b_all.clicked.connect(lambda: self._set_all(True))
         b_none = QPushButton("Alles uitvinken")
         b_none.clicked.connect(lambda: self._set_all(False))
+        b_clear = QPushButton("Kolomfilters wissen")
+        b_clear.clicked.connect(lambda: self.header.clear_all())
         b_xls = QPushButton("Exporteer Excel…")
         b_xls.clicked.connect(self.export_excel)
         b_imp = QPushButton("Exporteer impex…")
@@ -389,18 +400,22 @@ class ResultsTab(QWidget):
         for w in (QLabel("Filter:"), self.f_attr, self.f_status, btn, self.counter):
             bar.addWidget(w)
         bar.addStretch()
-        for w in (b_all, b_none, b_xls, b_imp):
+        for w in (b_clear, b_all, b_none, b_xls, b_imp):
             bar.addWidget(w)
 
         self.grid = QTableWidget()
         self.grid.setColumnCount(len(self.COLUMNS))
+        # kolomkop zoals in Excel: klik = menu met sorteren en filteren
+        self.header = ExcelFilterHeader(self.grid)
+        self.header.filters_changed.connect(self._update_counter)
         self.grid.setHorizontalHeaderLabels([c[1] for c in self.COLUMNS])
-        self.grid.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
-        self.grid.horizontalHeader().setStretchLastSection(True)
+        self.header.setSectionResizeMode(QHeaderView.Interactive)
+        self.header.setStretchLastSection(True)
         self.grid.setSelectionBehavior(QTableWidget.SelectRows)
         self.grid.itemChanged.connect(self._on_item_changed)
         self.grid.currentCellChanged.connect(lambda r, *_: self._show_row(r))
-        enable_sorting(self.grid)
+        self.grid.setSelectionMode(QTableWidget.ExtendedSelection)
+        self.grid.installEventFilter(self)          # sneltoetsen, ongeacht de huidige kolom
 
         self.preview = QLabel(alignment=Qt.AlignCenter)
         self.preview.setFixedSize(340, 340)
@@ -424,7 +439,11 @@ class ResultsTab(QWidget):
         split.setSizes([1000, 360])
         hint = QLabel("Pas 'Gegenereerde waarde' aan waar nodig (typen of dubbelklik rechts) en vink aan "
                       "wat mee moet. Een waarde die niet letterlijk in de optielijst staat, is rood en "
-                      "krijgt geen SAP-code. Aanpassingen worden meteen bewaard.")
+                      "krijgt geen SAP-code. Aanpassingen worden meteen bewaard. Klik op een kolomkop "
+                      "om te sorteren of te filteren (zoals in Excel). 'Zekerheid' = hoe zeker het "
+                      "model was (0–1). Toetsen: <b>spatie</b> = exportvinkje van de geselecteerde "
+                      "rijen aan/uit · <b>Enter</b>/<b>F2</b> = waarde bewerken · <b>Delete</b> = "
+                      "waarde wissen · ↑/↓ = vorige/volgende rij (Shift/Ctrl = meerdere selecteren).")
         hint.setWordWrap(True)
         lay = QVBoxLayout(self)
         lay.addWidget(hint)
@@ -464,6 +483,9 @@ class ResultsTab(QWidget):
         status = self.f_status.currentText()
         if status == "met resultaat":
             mask &= processed
+        elif status == "lage zekerheid (< drempel)":
+            conf = pd.to_numeric(t["confidence"], errors="coerce")
+            mask &= processed & t["generated value"].notna() & (conf < self.cfg.confidence_threshold)
         elif status == "alleen niet in optielijst":
             mask &= processed & t["generated value"].notna() & ~t["valid"]
         elif status == "zonder waarde":
@@ -490,7 +512,13 @@ class ResultsTab(QWidget):
                     text = "" if v is None or (isinstance(v, float) and pd.isna(v)) else str(v)
                     if key == "motivation" and isinstance(row["error"], str):
                         text = f"FOUT: {row['error']}"
+                    if key == "confidence":
+                        text = f"{v:.2f}" if text else ""
                     item = SortableTableItem(text)
+                    if key == "confidence" and text:
+                        item.setData(SORT_ROLE, float(v))
+                        item.setForeground(QColor(_conf_color(float(v))))
+                        item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
                     if key == "generated value":
                         item.setFlags(item.flags() | Qt.ItemIsEditable)
                         if text and not row["valid"]:
@@ -504,10 +532,19 @@ class ResultsTab(QWidget):
         self._loading = False
         if len(self.view_idx) < 3000:
             self.grid.resizeColumnsToContents()
-        self.grid.setColumnWidth(3, min(self.grid.columnWidth(3), 260))
-        self.grid.setColumnWidth(9, 320)
+        self.grid.setColumnWidth(self.COL["productName"], min(self.grid.columnWidth(self.COL["productName"]), 260))
+        self.grid.setColumnWidth(self.COL["motivation"], 320)
+        self.header.apply()                     # kolomfilters blijven actief (zoals Excel)
+        self._update_counter()
+
+    def _update_counter(self):
+        t = self.table_df
+        if t.empty:
+            return
         n_ok = int((t["approved"] & t["generated value"].notna() & t["valid"]).sum())
-        self.counter.setText(f"{len(self.view_idx)} rijen getoond · {n_ok} klaar voor export")
+        shown = len(self.header.visible_rows())
+        filt = (f" (van {self.grid.rowCount()}; kolomfilter actief)" if self.header.filters else "")
+        self.counter.setText(f"{shown} rijen getoond{filt} · {n_ok} klaar voor export")
 
     # ------------------------------------------------------------ bewerken
 
@@ -548,6 +585,7 @@ class ResultsTab(QWidget):
         t.at[idx, "generated value"] = norm
         t.at[idx, "valid"] = valid
         t.at[idx, "new_sap_values"] = sap_codes(ref, attr, norm) if valid else ""
+        t.at[idx, "confidence"] = None          # zekerheid hoort bij de modelkeuze
         t.at[idx, "approved"] = bool(norm) and valid
         if not self._has_result(idx):
             # nog geen modelresultaat: een manuele waarde maakt een rij aan
@@ -606,7 +644,10 @@ class ResultsTab(QWidget):
         vi = self.grid.item(r, self.VALUE_COL)
         vi.setText(v)
         vi.setForeground(QColor(192, 57, 43) if v and not t.at[idx, "valid"] else QColor(0, 0, 0))
-        self.grid.item(r, 8).setText(t.at[idx, "new_sap_values"] or "")
+        self.grid.item(r, self.COL["new_sap_values"]).setText(t.at[idx, "new_sap_values"] or "")
+        ci = self.grid.item(r, self.COL["confidence"])
+        ci.setText("")
+        ci.setData(SORT_ROLE, None)
         self._loading = False
         self.grid.setSortingEnabled(True)
 
@@ -626,9 +667,64 @@ class ResultsTab(QWidget):
         if r >= 0:
             self.grid.setCurrentCell(r, self.VALUE_COL)
 
+    # ------------------------------------------------------------ toetsen
+
+    def eventFilter(self, obj, event):
+        if (obj is self.grid and event.type() == QEvent.KeyPress
+                and self.grid.state() != QTableWidget.EditingState):
+            key = event.key()
+            if key == Qt.Key_Space and not event.modifiers():
+                self._toggle_selected()
+                return True
+            if key in (Qt.Key_Return, Qt.Key_Enter, Qt.Key_F2):
+                r = self.grid.currentRow()
+                if r >= 0:
+                    self.grid.setCurrentCell(r, self.VALUE_COL)
+                    self.grid.editItem(self.grid.item(r, self.VALUE_COL))
+                return True
+            if key == Qt.Key_Delete:
+                self._clear_selected()
+                return True
+        return super().eventFilter(obj, event)
+
+    def _selected_rows(self) -> list[int]:
+        rows = {i.row() for i in self.grid.selectedIndexes()}
+        if not rows and self.grid.currentRow() >= 0:
+            rows = {self.grid.currentRow()}
+        return sorted(r for r in rows if not self.grid.isRowHidden(r))
+
+    def _toggle_selected(self):
+        """Spatie: exportvinkje van de geselecteerde rijen omschakelen (staat er
+        één uit, dan gaan ze allemaal aan; anders allemaal uit)."""
+        rows = self._selected_rows()
+        if not rows:
+            return
+        on = any(self.grid.item(r, 0).checkState() != Qt.Checked for r in rows)
+        idxs = [self._idx_at(r) for r in rows]
+        self.grid.setSortingEnabled(False)          # rijen niet laten verspringen
+        for r in rows:
+            self.grid.item(r, 0).setCheckState(Qt.Checked if on else Qt.Unchecked)
+        self.grid.setSortingEnabled(True)
+        # selectie behouden op dezelfde data (sorteren op de vinkjeskolom verplaatst rijen)
+        cur = self._row_of(idxs[0])
+        if cur >= 0:
+            self.grid.setCurrentCell(cur, self.grid.currentColumn() if self.grid.currentColumn() >= 0 else 0)
+
+    def _clear_selected(self):
+        rows = self._selected_rows()
+        if not rows:
+            return
+        if len(rows) > 1 and QMessageBox.question(
+                self, "Waarden wissen", f"De gegenereerde waarde van {len(rows)} rijen wissen?") \
+                != QMessageBox.Yes:
+            return
+        for idx in [self._idx_at(r) for r in rows]:
+            self._set_value(idx, "", refresh=True)
+
     def _set_all(self, on: bool):
+        # alleen de zichtbare rijen (na kolomfilters), zoals in Excel
         self.grid.setSortingEnabled(False)
-        for r in range(self.grid.rowCount()):
+        for r in self.header.visible_rows():
             self.grid.item(r, 0).setCheckState(Qt.Checked if on else Qt.Unchecked)
         self.grid.setSortingEnabled(True)
 

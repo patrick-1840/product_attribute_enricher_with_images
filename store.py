@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS attr_results (
     choice        TEXT,            -- modelkeuze (gevalideerd of originele tekst)
     valid         INTEGER NOT NULL DEFAULT 1,   -- 0 = niet in de optielijst
     motivation    TEXT,
+    confidence    REAL,            -- zekerheid volgens het model (0-1), indien gegeven
     model         TEXT,
     error         TEXT,
     created_at    TEXT NOT NULL,
@@ -120,6 +121,9 @@ class Store:
         cols = {r[1] for r in self.conn.execute("PRAGMA table_info(products)")}
         if "category" not in cols:
             self.conn.execute("ALTER TABLE products ADD COLUMN category TEXT")
+        cols = {r[1] for r in self.conn.execute("PRAGMA table_info(attr_results)")}
+        if "confidence" not in cols:
+            self.conn.execute("ALTER TABLE attr_results ADD COLUMN confidence REAL")
 
     def close(self) -> None:
         self.conn.close()
@@ -296,16 +300,17 @@ class Store:
 
     def save_attr_result(self, product_id: str, attr: str, url: str, choice: str | None,
                          valid: bool, motivation: str | None, model: str,
-                         error: str | None = None) -> None:
+                         error: str | None = None, confidence: float | None = None) -> None:
         """Nieuw modelresultaat; een eerdere manuele aanpassing vervalt."""
         self.conn.execute(
             "INSERT INTO attr_results(product_id, attribute_key, url, choice, valid, motivation, "
-            "model, error, created_at, edited_value, approved) VALUES (?,?,?,?,?,?,?,?,?,NULL,NULL) "
+            "confidence, model, error, created_at, edited_value, approved) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,NULL,NULL) "
             "ON CONFLICT(product_id, attribute_key) DO UPDATE SET url=excluded.url, "
             "choice=excluded.choice, valid=excluded.valid, motivation=excluded.motivation, "
-            "model=excluded.model, error=excluded.error, created_at=excluded.created_at, "
-            "edited_value=NULL, approved=NULL",
-            (product_id, attr, url, choice, int(valid), motivation, model, error, _now()))
+            "confidence=excluded.confidence, model=excluded.model, error=excluded.error, "
+            "created_at=excluded.created_at, edited_value=NULL, approved=NULL",
+            (product_id, attr, url, choice, int(valid), motivation, confidence, model, error, _now()))
 
     def set_attr_edit(self, product_id: str, attr: str, edited_value: str | None,
                       approved: bool | None) -> None:
