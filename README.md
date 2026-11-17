@@ -59,26 +59,42 @@ drie packshot-labels (product, verpakking, beide) krijgt standaard het vinkje.
 Via *Exporteer als...* in tab 1 schrijf je de beeldlabels terug naar het Excel
 (`image N label` / `image N use`), samen met een correctielog als trainingsdata.
 
-## Sneltoetsen in de packshot-review
+## Packshot-review (tab 2)
 
-| Toets | Actie |
+Een doorscrolbare lijst met één rij per product en alle beelden naast elkaar.
+Het beeld dat de attribuutverrijking als packshot gebruikt, heeft een **groene
+rand en een ★**. Beelden zonder vinkje "gebruik" zijn gedimd. Je scrollt snel
+door de lijst (muiswiel, PgUp/PgDown) en grijpt alleen in waar het packshot
+fout is. Daarna keur je de rest in één keer goed met **Goedkeuren tot hier**.
+
+Handige filters: *alleen twijfelgevallen* (geen packshot, packshot is niet het
+eerste beeld, of een beeld onder de confidence-drempel) en *alleen niet
+gereviewd*. Met *Beeldgrootte* zet je meer producten op één scherm.
+
+| Toets / muis | Actie |
 |---|---|
-| ← / → (horizontaal) of ↑ / ↓ (verticaal) | vorige / volgende afbeelding |
-| **A** | accept: voorgesteld label goedkeuren, door naar de volgende afbeelding |
-| **D** | deny: voorgesteld label afkeuren (label "onbekend", vinkje uit), door naar de volgende afbeelding |
-| **1–7** | label zetten op packshot product / verpakking / beide / sfeerbeeld / swatch / tekst / overig, door naar de volgende afbeelding |
+| muiswiel, PgUp / PgDown, Home / End | snel scrollen |
+| ↑ / ↓ | vorig / volgend product |
+| ← / → | vorige / volgende afbeelding |
+| klik | afbeelding selecteren |
+| **dubbelklik** of **P** | deze afbeelding als packshot kiezen (de andere beelden van het product krijgen geen vinkje meer) |
+| **Enter** | product goedkeuren (alle voorstellen) en naar het volgende product |
+| rechtsklik | menu: packshot, vinkje, accept/deny, label, review wissen |
+| A / D | voorstel van de afbeelding goedkeuren / afkeuren |
+| 1–7 | label zetten op packshot product / verpakking / beide / sfeerbeeld / swatch / tekst / overig |
 | Spatie | vinkje "gebruik voor attributie" omschakelen |
-| Backspace | review van de huidige afbeelding wissen |
-| PgUp / PgDown | vorig / volgend product |
+| Backspace | review van de afbeelding wissen |
 
-Alle toetsen en de oriëntatie (horizontaal/verticaal) stel je in bij
-**Instellingen**. Ze worden onthouden.
+Alle toetsen stel je in bij **Instellingen**. Ze worden onthouden. Let op:
+de keuze van het packshot telt alleen als *Packshot =* bij Instellingen op
+"eerste beeld met vinkje 'gebruik'" staat. In de modus "eerste beeld" wordt
+altijd het eerste beeld gebruikt.
 
 ## Instellingen (tab 3)
 
 API-key, model, aantal gelijktijdige calls, escalatiemodel, confidence-drempel,
-cachemap, aantal gelijktijdige downloads, product-id-kolom, extra beeldkolommen,
-lay-out en sneltoetsen.
+cachemap, aantal gelijktijdige downloads, product-id-kolom, extra beeldkolommen
+en sneltoetsen.
 
 - Instellingen: `%APPDATA%\ProductImageClassifier\settings.json`
 - API-key: `%APPDATA%\ProductImageClassifier\.env` (of een `.env` naast het programma)

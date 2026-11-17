@@ -43,6 +43,8 @@ Afhankelijkheidsrichting: `config` ← `store` ← `loader`/`fetcher`/`classifie
 
 - `config.py` — `ClassifierConfig` dataclass, labels, standaardprompt,
   standaardsneltoetsen (`DEFAULT_SHORTCUTS`). **Nieuwe knoppen komen hier.**
+  Een actie hernoemen = oude waarden in settings.json worden genegeerd (bewust
+  gebruikt bij de overgang naar de lijstreview).
 - `store.py` — SQLite-toestand: `images` (per unieke URL: download + label),
   `items` (product × slot → URL), `products` (contextinfo), `reviews`.
 - `loader.py` — leest Excel/CSV, detecteert beeldkolommen, bouwt de platte tabel.
@@ -56,7 +58,10 @@ Afhankelijkheidsrichting: `config` ← `store` ← `loader`/`fetcher`/`classifie
   Wijzig alleen samen met het origineel; bij integratie weer samenvoegen.
 - `attr_enricher.py` — packshotkeuze, één visie-call per product met alle
   gekozen attributen, validatie, `results_table`, Excel/impex-export.
-- `review_widget.py` — reviewscherm met kaarten en sneltoetsen.
+- `review_widget.py` — packshot-review als gevirtualiseerde lijst (QListView +
+  delegate die zelf tekent, thumbnails via QPixmapCache): één rij per product.
+  Toetsen worden in `ProductView.keyPressEvent` afgehandeld (geen QShortcut,
+  anders slokken filtervelden/tabbalk ze op); PgUp/PgDown/Home/End blijven native.
 - `attribute_tab.py` — tabs "Attributen" (boom + toegelaten waarden + run) en
   "Resultaten" (tabel + packshotvoorbeeld + export).
 - `qt_common.py` — `TaskWorker` (QThread) en `StepBox` (start/pauze/stop).
@@ -89,7 +94,9 @@ Afhankelijkheidsrichting: `config` ← `store` ← `loader`/`fetcher`/`classifie
   (`approved`) worden meteen bewaard; een nieuwe modelrun wist ze.
 - Effectief label/vinkje: review wint; anders voorstel (vinkje aan ⇔ packshot);
   geen voorstel en geen review → lege cellen. Logica in `exporter.effective_*`
-  en gespiegeld in `ReviewWidget._save` — houd die twee in sync.
+  en gespiegeld in `ReviewWidget._save` — houd die twee in sync. Het packshot
+  in de review (`ReviewWidget.packshot_of`) volgt dezelfde regel als
+  `attr_enricher.select_packshots`.
 - Reviews gelden alleen zolang de URL in dat slot dezelfde is (join op URL).
 - Categoriekeuze (`scope`-tabel, `products.category` = `mainCategory` in
   hoofdletters): `urls_to_fetch`, `urls_to_classify`, `item_table()`,
@@ -152,6 +159,7 @@ python cli.py --cache-dir C:/temp/pic fetch --limit 30
 python cli.py --cache-dir C:/temp/pic classify --limit 30 --simulate
 python cli.py --cache-dir C:/temp/pic export --file <productlijst> --out C:/temp/pic/out.xlsx
 ```
-en open de desktop-app om het reviewscherm met de sneltoetsen te testen.
+en open de desktop-app om de reviewlijst met de sneltoetsen te testen
+(ook nadat je in een filterveld geklikt hebt).
 
 @README.md bevat de gebruikersworkflow.
