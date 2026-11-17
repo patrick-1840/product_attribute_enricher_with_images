@@ -571,13 +571,8 @@ class MainWindow(QMainWindow):
         f.addRow("Impex-catalogus:", self.ed_catalog)
         lay.addWidget(g)
 
-        g = QGroupBox("Review: lay-out en sneltoetsen")
+        g = QGroupBox("Packshot-review: sneltoetsen")
         f = QFormLayout(g)
-        self.cb_orient = QComboBox()
-        self.cb_orient.addItem("horizontaal (naast elkaar, ←/→)", "horizontal")
-        self.cb_orient.addItem("verticaal (onder elkaar, ↑/↓)", "vertical")
-        self.cb_orient.setCurrentIndex(1 if self.cfg.layout_orientation == "vertical" else 0)
-        f.addRow("Oriëntatie:", self.cb_orient)
         self.key_edits: dict[str, QKeySequenceEdit] = {}
         for action, (desc, _default) in DEFAULT_SHORTCUTS.items():
             ed = QKeySequenceEdit(QKeySequence(self.cfg.shortcut(action)))
@@ -628,9 +623,7 @@ class MainWindow(QMainWindow):
             return
         keys = {a: ed.keySequence().toString() for a, ed in self.key_edits.items()}
         # dubbele toewijzingen binnen dezelfde lay-out weigeren
-        vertical = self.cb_orient.currentData() == "vertical"
-        skip = {"next_h", "prev_h"} if vertical else {"next_v", "prev_v"}
-        active = [(a, k) for a, k in keys.items() if k and a not in skip]
+        active = [(a, k) for a, k in keys.items() if k]
         seen: dict[str, str] = {}
         for a, k in active:
             if k in seen:
@@ -654,7 +647,6 @@ class MainWindow(QMainWindow):
         self.cfg.id_column = self.ed_id.text().strip() or "variant_code"
         self.cfg.extra_image_columns = [c.strip() for c in self.ed_extra.text().split(",") if c.strip()]
         self.cfg.info_columns = [c.strip() for c in self.ed_info.text().split(",") if c.strip()]
-        self.cfg.layout_orientation = self.cb_orient.currentData()
         self.cfg.shortcuts = keys
         old_refs = (self.cfg.attribute_types_file, self.cfg.sap_mapping_file)
         self.cfg.packshot_mode = self.cb_pmode.currentData()

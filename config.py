@@ -205,16 +205,18 @@ def _default_ref_file(key: str, name: str) -> Path:
 # ------------------------------------------------------------------ sneltoetsen
 
 #: actie -> (omschrijving, standaardtoets). Volgorde = volgorde in het settings-scherm.
+# (Actienamen gewijzigd t.o.v. v0.1 zodat oude toetsen uit settings.json niet
+# blijven hangen; PgUp/PgDown/Home/End blijven vrij om snel te scrollen.)
 DEFAULT_SHORTCUTS: dict[str, tuple[str, str]] = {
-    "accept": ("Voorstel goedkeuren (accept)", "A"),
-    "deny": ("Voorstel afkeuren (deny)", "D"),
+    "prod_next": ("Volgend product", "Down"),
+    "prod_prev": ("Vorig product", "Up"),
+    "img_next": ("Volgende afbeelding", "Right"),
+    "img_prev": ("Vorige afbeelding", "Left"),
+    "accept_product": ("Product goedkeuren (alle voorstellen) en door", "Return"),
+    "set_packshot": ("Huidige afbeelding als packshot kiezen", "P"),
+    "accept": ("Voorstel van de afbeelding goedkeuren (accept)", "A"),
+    "deny": ("Voorstel van de afbeelding afkeuren (deny)", "D"),
     "toggle_use": ("Vinkje 'gebruik' omschakelen", "Space"),
-    "next_h": ("Volgende afbeelding (horizontale lay-out)", "Right"),
-    "prev_h": ("Vorige afbeelding (horizontale lay-out)", "Left"),
-    "next_v": ("Volgende afbeelding (verticale lay-out)", "Down"),
-    "prev_v": ("Vorige afbeelding (verticale lay-out)", "Up"),
-    "next_product": ("Volgend product", "PgDown"),
-    "prev_product": ("Vorig product", "PgUp"),
     "undo": ("Review van huidige afbeelding wissen", "Backspace"),
     **{f"label_{i + 1}": (f"Label zetten op '{lab}'", str(i + 1)) for i, lab in enumerate(LABELS)},
 }
@@ -279,7 +281,7 @@ class ClassifierConfig:
     attribute_prompt: str = DEFAULT_ATTRIBUTE_PROMPT
 
     # --- Review ---
-    layout_orientation: str = "horizontal"  # "horizontal" | "vertical"
+    review_thumb_px: int = 140              # thumbnailgrootte in de reviewlijst
     shortcuts: dict[str, str] = field(
         default_factory=lambda: {k: v[1] for k, v in DEFAULT_SHORTCUTS.items()})
 
