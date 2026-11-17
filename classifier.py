@@ -40,7 +40,12 @@ LABEL_SYNONYMS = {
     "lifestyle": "sfeerbeeld", "mood": "sfeerbeeld", "sfeer": "sfeerbeeld",
     "text": "tekst", "infographic": "tekst",
     "other": "overig", "texture": "swatch",
-    "product": "packshot", "pack shot": "packshot",
+    "packshot": "packshot_product", "pack shot": "packshot_product",
+    "product": "packshot_product", "packshot product": "packshot_product",
+    "packaging": "packshot_verpakking", "box": "packshot_verpakking",
+    "packshot verpakking": "packshot_verpakking", "packshot_packaging": "packshot_verpakking",
+    "both": "packshot_beide", "packshot beide": "packshot_beide",
+    "packshot_both": "packshot_beide",
 }
 
 ProgressFn = Callable[[int, int, str], None]
@@ -163,7 +168,7 @@ class ImageClassifier:
     async def _classify(self, thumb_path: Path, model: str, call_id: str) -> tuple[str, float, str]:
         if not self.cfg.use_openai:
             await asyncio.sleep(random.uniform(0.01, 0.05))
-            label = random.choices(LABELS, weights=[5, 2, 1, 1, 1])[0]
+            label = random.choices(LABELS, weights=[4, 1, 2, 2, 1, 1, 1])[0]
             conf = round(random.uniform(0.4, 1.0), 2)
             return label, conf, json.dumps({"label": label, "confidence": conf})
 

@@ -4,12 +4,15 @@ Desktop-app (PySide6/Qt) voor de Product Image Classifier.
 Start met:  python desktop_app.py
 
 Structuur:
-  Tab 1 — Data & verwerking : Excel inlezen → downloaden → classificeren
-                              (elk met voortgang, pauzeren/hervatten, stoppen)
-                              → exporteren
-  Tab 2 — Review           : per product de thumbnails beoordelen met sneltoetsen
-  Tab 3 — Instellingen     : API-key, model, concurrency, drempel, cachemap,
-                              lay-out en sneltoetsen
+  Tab 1 — Data & beelden   : Excel inlezen → packshots downloaden →
+                              (optioneel) beelden classificeren → beeldlabels exporteren
+  Tab 2 — Packshot-review  : per product de thumbnails beoordelen met sneltoetsen
+                              (alleen nodig in packshot-modus "review")
+  Tab 3 — Attributen       : categorie × attribuut kiezen (met toegelaten waarden),
+                              werklijst opbouwen, attributen bepalen op het packshot
+  Tab 4 — Resultaten       : waarden controleren naast het packshot, export Excel/impex
+  Tab 5 — Instellingen     : API-key, modellen, packshot-modus, referentiebestanden,
+                              cachemap, lay-out en sneltoetsen
 """
 from __future__ import annotations
 
@@ -31,7 +34,7 @@ from PySide6.QtWidgets import (
 from config import (
     DEFAULT_SHORTCUTS, LOG_FILE, USER_ENV_FILE, ClassifierConfig, save_api_key, setup_logging,
 )
-from runcontrol import RunControl
+from qt_common import StepBox, TaskWorker
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -41,61 +44,6 @@ def _resource_dir() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys._MEIPASS)
     return Path(__file__).resolve().parent
-
-
-# ================================================================= worker thread
-
-class TaskWorker(QThread):
-    """Draait een blokkerende taak (inlezen, downloaden, classificeren) buiten
-    de UI-thread. ``fn(control, progress)`` krijgt de RunControl en een
-    voortgangscallback mee."""
-
-    progress = Signal(int, int, str)
-    finished_ok = Signal(object)
-    failed = Signal(str)
-
-    def __init__(self, fn):
-        super().__init__()
-        self.fn = fn
-        self.control = RunControl()
-
-    def run(self):
-        try:
-            result = self.fn(self.control, lambda d, t, m: self.progress.emit(d, t, m))
-            self.finished_ok.emit(result)
-        except Exception as exc:
-            logger.exception("Taak mislukt")
-            self.failed.emit(str(exc))
-
-
-class StepBox(QGroupBox):
-    """Groep met start/pauze/stop-knoppen en een voortgangsbalk."""
-
-    def __init__(self, title: str, start_text: str):
-        super().__init__(title)
-        self.btn_start = QPushButton(start_text)
-        self.btn_pause = QPushButton("Pauzeer")
-        self.btn_stop = QPushButton("Stop")
-        self.bar = QProgressBar()
-        self.bar.setFormat("%v / %m")
-        self.msg = QLabel()
-        self.options = QHBoxLayout()
-        row = QHBoxLayout()
-        for b in (self.btn_start, self.btn_pause, self.btn_stop):
-            row.addWidget(b)
-        row.addLayout(self.options)
-        row.addStretch()
-        lay = QVBoxLayout(self)
-        lay.addLayout(row)
-        lay.addWidget(self.bar)
-        lay.addWidget(self.msg)
-        self.set_running(False)
-
-    def set_running(self, running: bool):
-        self.btn_start.setEnabled(not running)
-        self.btn_pause.setEnabled(running)
-        self.btn_stop.setEnabled(running)
-        self.btn_pause.setText("Pauzeer")
 
 
 # ================================================================= main window
@@ -119,11 +67,19 @@ class MainWindow(QMainWindow):
         self.review.status_message.connect(lambda m: self.statusBar().showMessage(m, 6000))
         self.review.export_requested.connect(self.export)
 
+        from attribute_tab import AttributeTab, ResultsTab
+        self.attr_tab = AttributeTab(self.cfg, self)
+        self.results_tab = ResultsTab(self.cfg, self.attr_tab, self)
+        self.attr_tab.work_ready.connect(self.results_tab.reload)
+
         self.tabs = QTabWidget()
         self.setCentralWidget(self.tabs)
-        self.tabs.addTab(self._build_data_tab(), "1 · Data && verwerking")
-        self.tabs.addTab(self.review, "2 · Review")
-        self.tabs.addTab(self._build_settings_tab(), "3 · Instellingen")
+        self.tabs.addTab(self._build_data_tab(), "1 · Data && beelden")
+        self.tabs.addTab(self.review, "2 · Packshot-review")
+        self.tabs.addTab(self.attr_tab, "3 · Attributen")
+        self.tabs.addTab(self.results_tab, "4 · Resultaten && export")
+        self.settings_tab = self._build_settings_tab()
+        self.tabs.addTab(self.settings_tab, "5 · Instellingen")
         self.tabs.currentChanged.connect(self._on_tab_changed)
 
         self.refresh_stats()
@@ -157,13 +113,20 @@ class MainWindow(QMainWindow):
         self.box_fetch = StepBox("2. Afbeeldingen downloaden (thumbnails in de cachemap)",
                                  "Start downloaden")
         self.chk_retry = QCheckBox("mislukte opnieuw proberen")
+        self.chk_only_first = QCheckBox("alleen packshots (eerste beeld per product)")
+        self.chk_only_first.setToolTip("In packshot-modus 'eerste beeld' volstaat dit: ~1 beeld per "
+                                       "product i.p.v. alle beelden.")
+        self.chk_only_first.setChecked(self.cfg.packshot_mode == "first" and self.cfg.only_fetch_packshots)
+        self.box_fetch.options.addWidget(self.chk_only_first)
         self.box_fetch.options.addWidget(self.chk_retry)
         self.box_fetch.btn_start.clicked.connect(self.start_fetch)
         self._wire_box(self.box_fetch)
         lay.addWidget(self.box_fetch)
 
         # Classificeren
-        self.box_cls = StepBox("3. Classificeren met OpenAI", "Start classificatie")
+        self.box_cls = StepBox("3. (Optioneel) Beelden classificeren — packshot product / "
+                               "verpakking / beide, sfeerbeeld, … — nodig voor packshot-modus 'review'",
+                               "Start classificatie")
         self.chk_sim = QCheckBox("simulatiemodus (geen API-kosten)")
         self.sp_limit = QSpinBox(minimum=0, maximum=1_000_000, specialValueText="geen limiet")
         self.sp_limit.setToolTip("Maximum aantal beelden in deze run (0 = alles). Handig om te testen.")
@@ -274,34 +237,52 @@ class MainWindow(QMainWindow):
             from loader import build_image_table, read_product_file
             from store import Store
             progress(0, 0, "Inlezen…")
-            items, products, report = build_image_table(read_product_file(path), cfg)
+            catalog = read_product_file(path)
+            items, products, report = build_image_table(catalog, cfg)
             store = Store(cfg.db_path)
             try:
                 store.replace_items(items, products)
             finally:
                 store.close()
-            return report
+            # Referentiedata voor de attribuutverrijking; een fout hier blokkeert
+            # het beeldgedeelte niet.
+            ref, ref_error = None, ""
+            try:
+                from reference import load_reference_data
+                progress(0, 0, "Referentiebestanden inlezen…")
+                ref = load_reference_data(cfg)
+            except Exception as exc:
+                logger.warning("Referentiedata niet geladen: %s", exc)
+                ref_error = str(exc)
+            return report, catalog, ref, ref_error
 
         self.btn_load.setEnabled(False)
         self.lbl_load.setText("Bezig met inlezen… (een groot Excel duurt even)")
         self._start(task, None, self._on_loaded)
 
-    def _on_loaded(self, report):
+    def _on_loaded(self, result):
+        report, catalog, ref, ref_error = result
         txt = "✔ " + report.summary()
         if report.invalid_urls:
             txt += f"<br>Voorbeelden ongeldig: {report.invalid_urls[:3]}"
+        if ref_error:
+            txt += (f"<br><span style='color:#c0392b'>⚠️ Referentiebestanden niet geladen "
+                    f"(attribuutverrijking niet mogelijk): {ref_error}</span>")
         self.lbl_load.setText(txt)
         self.review.reload(keep_position=False)
+        self.attr_tab.set_data(catalog, ref, ref_error)
+        self.results_tab.reload()
 
     # --- downloaden
     def start_fetch(self):
         if self._busy():
             return
-        cfg, retry = self.cfg, self.chk_retry.isChecked()
+        cfg, retry, only_first = self.cfg, self.chk_retry.isChecked(), self.chk_only_first.isChecked()
 
         def task(control, progress):
             from fetcher import ImageFetcher
-            return ImageFetcher(cfg, control).run(retry_failed=retry, progress=progress)
+            return ImageFetcher(cfg, control).run(retry_failed=retry, progress=progress,
+                                                  only_first=only_first)
 
         self._start(task, self.box_fetch, lambda r: self.box_fetch.msg.setText(
             f"{'Gestopt' if self.worker.control.cancelled else 'Klaar'}: {r['ok']} ok, "
@@ -314,7 +295,7 @@ class MainWindow(QMainWindow):
         self.cfg.use_openai = not self.chk_sim.isChecked()
         if self.cfg.use_openai and not self.cfg.openai_api_key:
             QMessageBox.warning(self, "Geen API-key", "Vul eerst je OpenAI API-key in bij Instellingen.")
-            self.tabs.setCurrentIndex(2)
+            self.tabs.setCurrentWidget(self.settings_tab)
             return
         cfg, limit = self.cfg, self.sp_limit.value() or None
 
@@ -387,6 +368,8 @@ class MainWindow(QMainWindow):
     def _on_tab_changed(self, i: int):
         if self.tabs.widget(i) is self.review:
             self.review.reload()
+        elif self.tabs.widget(i) is self.results_tab and self.attr_tab.work is not None:
+            self.results_tab.reload()
         elif i == 0:
             self.refresh_stats()
 
@@ -449,6 +432,30 @@ class MainWindow(QMainWindow):
         f.addRow("Infokolommen in review:", self.ed_info)
         lay.addWidget(g)
 
+        g = QGroupBox("Attribuutverrijking op het packshot")
+        f = QFormLayout(g)
+        self.cb_pmode = QComboBox()
+        self.cb_pmode.addItem("eerste beeld per product (geen classificatie nodig)", "first")
+        self.cb_pmode.addItem("eerste beeld met vinkje 'gebruik' (na classificatie/review)", "review")
+        self.cb_pmode.setCurrentIndex(1 if self.cfg.packshot_mode == "review" else 0)
+        f.addRow("Packshot =", self.cb_pmode)
+        self.ed_types = self._file_field(f, "Attribuuttypes (single/multi):", self.cfg.attribute_types_file)
+        self.ed_sap = self._file_field(f, "SAP-attribuutmapping:", self.cfg.sap_mapping_file)
+        f.addRow("", QLabel("Dezelfde bronbestanden als de Product Attribute Enricher "
+                            "(standaard overgenomen uit diens instellingen)."))
+        self.cb_attr_model = QComboBox(editable=True)
+        self.cb_attr_model.addItems(["gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-4.1-mini", "gpt-5", "gpt-5-mini"])
+        self.cb_attr_model.setCurrentText(self.cfg.attribute_model)
+        f.addRow("Model attributen:", self.cb_attr_model)
+        self.cb_detail = QComboBox()
+        self.cb_detail.addItem("low — goedkoop, volstaat meestal voor kleur/vorm", "low")
+        self.cb_detail.addItem("high — fijnere details (duurder)", "high")
+        self.cb_detail.setCurrentIndex(1 if self.cfg.attribute_detail == "high" else 0)
+        f.addRow("Beelddetail:", self.cb_detail)
+        self.ed_catalog = QLineEdit(self.cfg.impex_catalog)
+        f.addRow("Impex-catalogus:", self.ed_catalog)
+        lay.addWidget(g)
+
         g = QGroupBox("Review: lay-out en sneltoetsen")
         f = QFormLayout(g)
         self.cb_orient = QComboBox()
@@ -474,6 +481,22 @@ class MainWindow(QMainWindow):
                              f"Logbestand: {LOG_FILE}"))
         lay.addStretch()
         return outer
+
+    def _file_field(self, form: QFormLayout, label: str, value) -> QLineEdit:
+        ed = QLineEdit(str(value))
+        btn = QPushButton("Bladeren…")
+
+        def pick():
+            path, _ = QFileDialog.getOpenFileName(self, label, ed.text(), "Excel (*.xlsx *.xlsm)")
+            if path:
+                ed.setText(path)
+
+        btn.clicked.connect(pick)
+        row = QHBoxLayout()
+        row.addWidget(ed)
+        row.addWidget(btn)
+        form.addRow(label, row)
+        return ed
 
     def _pick_cache_dir(self):
         d = QFileDialog.getExistingDirectory(self, "Cachemap kiezen", self.ed_cache.text())
@@ -518,7 +541,22 @@ class MainWindow(QMainWindow):
         self.cfg.info_columns = [c.strip() for c in self.ed_info.text().split(",") if c.strip()]
         self.cfg.layout_orientation = self.cb_orient.currentData()
         self.cfg.shortcuts = keys
+        old_refs = (self.cfg.attribute_types_file, self.cfg.sap_mapping_file)
+        self.cfg.packshot_mode = self.cb_pmode.currentData()
+        self.cfg.attribute_types_file = Path(self.ed_types.text().strip())
+        self.cfg.sap_mapping_file = Path(self.ed_sap.text().strip())
+        self.cfg.attribute_model = self.cb_attr_model.currentText().strip()
+        self.cfg.attribute_detail = self.cb_detail.currentData()
+        self.cfg.impex_catalog = self.ed_catalog.text().strip() or "Staged"
         self.cfg.save_user_settings()
+        self.attr_tab.update_model_label()
+        self.attr_tab.work = None   # packshot-modus/bestanden kunnen gewijzigd zijn
+        if (self.cfg.attribute_types_file, self.cfg.sap_mapping_file) != old_refs:
+            try:
+                from reference import load_reference_data
+                self.attr_tab.set_data(self.attr_tab.catalog, load_reference_data(self.cfg))
+            except Exception as exc:
+                QMessageBox.warning(self, "Referentiebestanden", str(exc))
 
         if Path(self.cfg.cache_dir) != old_cache:
             self.review.reset_store()

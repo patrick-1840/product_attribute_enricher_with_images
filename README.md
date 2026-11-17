@@ -1,52 +1,66 @@
 # Product Image Classifier
 
-Selecteert per product de bruikbare productafbeeldingen (**packshots**) uit de
-productlijst van ICI PARIS XL, als voorbereiding op visuele attribuutverrijking.
-Elke afbeelding krijgt automatisch een label (packshot, sfeerbeeld, swatch,
-tekst, overig) met een confidence. Daarna beoordeel je ze snel met het
-toetsenbord. Het resultaat is per afbeelding een label en een vinkje
-"gebruik voor attributie".
+Vult productattributen aan die je op de **productfoto (packshot)** kan zien,
+zoals de kleur van de verpakking (`colorPackaging`), de vorm van de fles
+(`shapeOfTheBottle`) of het type dispenser (`typeDispenser`). Het werkt zoals
+de Product Attribute Enricher: je kiest per categorie welke attributen gevuld
+worden, het model kiest alleen uit de toegelaten waarden van SAP Commerce, je
+controleert het resultaat, en je exporteert naar Excel en impex (met SAP-codes).
+Het verschil is dat het model naar het productbeeld kijkt in plaats van naar de
+tekst op de productpagina.
 
-Dit programma bouwt verder op de Product Attribute Enricher en gebruikt
-hetzelfde Excel-bestand als invoer.
+Daarnaast kan het programma alle productbeelden classificeren als packshot
+product / packshot verpakking / packshot beide / sfeerbeeld / swatch / tekst /
+overig, met een snelle review via het toetsenbord.
 
 ## Workflow
 
-**laden → downloaden → classificeren → reviewen → exporteren**
+**inlezen → packshots downloaden → attributen kiezen → verrijken → controleren → exporteren**
 
-1. **Laden** (tab 1): kies het productbestand en klik *Inlezen*. Het programma
-   zoekt zelf de beeldkolommen (`product image N` of `imageLinkN`, plus
-   `mainImageLink`) en bouwt een werklijst: één regel per product × afbeelding.
-   Lege cellen en ongeldige URL's worden overgeslagen.
-2. **Downloaden**: *Start downloaden* haalt elke unieke afbeelding één keer
-   op en bewaart een kleine versie (max. 512 px) in de cachemap. Je kunt
-   pauzeren, hervatten en stoppen. Wat al binnen is, wordt de volgende keer
-   overgeslagen. Mislukte downloads staan in `mislukte_urls.csv` in de cachemap.
-   Vink *mislukte opnieuw proberen* aan om ze opnieuw te proberen.
-3. **Classificeren**: *Start classificatie* stuurt elke thumbnail naar OpenAI
-   (standaard `gpt-4o-mini`, `detail: low`). Test eerst met de
-   **simulatiemodus** en een **limiet** (bv. 50). Elk resultaat wordt meteen
-   bewaard, dus stoppen of een crash verliest niets. Optioneel kun je in de
-   instellingen *escalatie* aanzetten: beelden onder de confidence-drempel
-   gaan dan nog eens naar een sterker model.
-4. **Reviewen** (tab 2): per product staan de afbeeldingen naast elkaar, met
-   het voorgestelde label en de confidence (groen/oranje/rood). Voorgestelde
-   packshots zijn standaard aangevinkt. Filter op label, op lage confidence
-   of op "alleen niet gereviewd", en klik *Toepassen*.
-5. **Exporteren**: *Exporteer als…* schrijft een kopie van het originele Excel
-   met per afbeelding de kolommen `image N label` en `image N use`
-   (true/false). Ernaast komt `<naam>_correcties.csv`: alle handmatig
-   beoordeelde beelden met voorstel én eindbeslissing, bruikbaar als
-   trainingsdata.
+1. **Inlezen** (tab 1): kies het productbestand (de wekelijkse productlijst) en
+   klik *Inlezen*. Het programma herkent zelf de beeldkolommen
+   (`mainImageLink`, `imageLink1`...`5`, of `product image N`) en leest meteen de
+   referentiebestanden (attribuuttypes en SAP-mapping, dezelfde als die van de
+   attribuutverrijker; je kiest ze bij Instellingen).
+2. **Packshots downloaden**: *Start downloaden* met *alleen packshots* aangevinkt
+   haalt per product het eerste beeld op (de front-foto). Dat zijn ongeveer
+   15.500 beelden. Je kunt pauzeren en stoppen. Wat al binnen is, wordt
+   overgeslagen.
+3. **Attributen kiezen** (tab 3): de boom toont per categorie alleen de
+   attributen die volgens de SAP-matrix bij die categorie horen, met de
+   vulgraad. Visuele attributen (oog-icoon) staan standaard aan. Klik een
+   attribuut aan om rechts de **toegelaten waarden** te zien: alleen die mag het
+   model teruggeven. Optioneel kun je een merkfilter zetten en "alleen lege
+   waarden" gebruiken. Klik daarna *Werklijst opbouwen*.
+4. **Verrijken**: *Start verrijking*. Per product gaat er één vraag naar het model,
+   met het packshot en alle gekozen attributen samen. Test eerst met de
+   **simulatiemodus** en een **limiet** (bv. 20 producten). Elk resultaat wordt
+   meteen bewaard.
+5. **Controleren** (tab 4): per rij zie je de gegenereerde waarde, de SAP-code
+   en de motivatie, met rechts het packshot en de toegelaten waarden. Pas aan
+   door te typen of door een waarde te dubbelklikken (Ctrl+dubbelklik voegt een
+   waarde toe bij multi-attributen). Een waarde die niet in de lijst staat, is
+   rood en gaat niet mee.
+6. **Exporteren**: *Exporteer Excel...* (zelfde kolommen als de attribuutverrijker,
+   plus de packshot-URL) en *Exporteer impex...* (zelfde impexformaat).
 
-## Sneltoetsen in de review
+### Optioneel: beelden classificeren en reviewen
+
+Wil je niet blindelings het eerste beeld als packshot gebruiken? Download dan
+alle beelden, laat ze classificeren (tab 1, stap 3), review ze in tab 2 en zet
+bij Instellingen *Packshot =* op "eerste beeld met vinkje 'gebruik'". Elk van de
+drie packshot-labels (product, verpakking, beide) krijgt standaard het vinkje.
+Via *Exporteer als...* in tab 1 schrijf je de beeldlabels terug naar het Excel
+(`image N label` / `image N use`), samen met een correctielog als trainingsdata.
+
+## Sneltoetsen in de packshot-review
 
 | Toets | Actie |
 |---|---|
 | ← / → (horizontaal) of ↑ / ↓ (verticaal) | vorige / volgende afbeelding |
 | **A** | accept: voorgesteld label goedkeuren, door naar de volgende afbeelding |
 | **D** | deny: voorgesteld label afkeuren (label "onbekend", vinkje uit), door naar de volgende afbeelding |
-| **1–5** | label zetten op packshot / sfeerbeeld / swatch / tekst / overig, door naar de volgende afbeelding |
+| **1–7** | label zetten op packshot product / verpakking / beide / sfeerbeeld / swatch / tekst / overig, door naar de volgende afbeelding |
 | Spatie | vinkje "gebruik voor attributie" omschakelen |
 | Backspace | review van de huidige afbeelding wissen |
 | PgUp / PgDown | vorig / volgend product |

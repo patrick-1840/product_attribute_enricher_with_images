@@ -15,6 +15,9 @@ Tabellen:
 - ``reviews``  — handmatige beslissingen per (product, slot). Blijven bewaard
                  over meerdere inleesbeurten heen, maar gelden alleen zolang de
                  URL in dat slot dezelfde is.
+- ``attr_results`` — attribuutwaarde per (product, attribuut) bepaald op het
+                 packshot met URL ``url``; plus manuele aanpassing en exportvinkje.
+                 Een ander packshot (andere URL) = opnieuw bepalen.
 
 Elke thread opent zijn eigen ``Store`` (eigen connectie); WAL-modus laat de
 UI lezen terwijl een worker schrijft.
@@ -59,6 +62,20 @@ CREATE TABLE IF NOT EXISTS products (
     product_id TEXT PRIMARY KEY,
     row_order  INTEGER NOT NULL,
     info       TEXT
+);
+CREATE TABLE IF NOT EXISTS attr_results (
+    product_id    TEXT NOT NULL,
+    attribute_key TEXT NOT NULL,
+    url           TEXT NOT NULL,
+    choice        TEXT,            -- modelkeuze (gevalideerd of originele tekst)
+    valid         INTEGER NOT NULL DEFAULT 1,   -- 0 = niet in de optielijst
+    motivation    TEXT,
+    model         TEXT,
+    error         TEXT,
+    created_at    TEXT NOT NULL,
+    edited_value  TEXT,            -- manuele aanpassing in de resultatentabel
+    approved      INTEGER,         -- exportvinkje (NULL = standaard: aan als er een geldige waarde is)
+    PRIMARY KEY (product_id, attribute_key)
 );
 CREATE TABLE IF NOT EXISTS reviews (
     product_id  TEXT NOT NULL,
@@ -122,11 +139,24 @@ class Store:
 
     # ------------------------------------------------------------ downloaden
 
-    def urls_to_fetch(self, retry_failed: bool = False) -> list[str]:
+    _FIRST_SLOT = ("it.position = (SELECT MIN(i2.position) FROM items i2 "
+                   "WHERE i2.product_id = it.product_id)")
+
+    def urls_to_fetch(self, retry_failed: bool = False, only_first: bool = False) -> list[str]:
+        """Te downloaden URL's. ``only_first``: enkel het eerste beeld per
+        product (het packshot in modus "first")."""
         statuses = ("pending", "failed") if retry_failed else ("pending",)
         q = (f"SELECT DISTINCT i.url FROM images i JOIN items it ON it.url = i.url "
              f"WHERE i.fetch_status IN ({','.join('?' * len(statuses))})")
+        if only_first:
+            q += " AND " + self._FIRST_SLOT
         return [r[0] for r in self.conn.execute(q, statuses)]
+
+    def first_images(self) -> pd.DataFrame:
+        """Eerste beeld per product met downloadstatus."""
+        q = ("SELECT it.product_id, it.slot, it.url, im.thumb, im.fetch_status "
+             "FROM items it JOIN images im ON im.url = it.url WHERE " + self._FIRST_SLOT)
+        return pd.read_sql_query(q, self.conn)
 
     def mark_fetched(self, url: str, thumb: str) -> None:
         self.conn.execute(
@@ -188,6 +218,33 @@ class Store:
 
     def clear_review(self, product_id: str, slot: str) -> None:
         self.conn.execute("DELETE FROM reviews WHERE product_id=? AND slot=?", (product_id, slot))
+
+    # ------------------------------------------------------------ attributen
+
+    def save_attr_result(self, product_id: str, attr: str, url: str, choice: str | None,
+                         valid: bool, motivation: str | None, model: str,
+                         error: str | None = None) -> None:
+        """Nieuw modelresultaat; een eerdere manuele aanpassing vervalt."""
+        self.conn.execute(
+            "INSERT INTO attr_results(product_id, attribute_key, url, choice, valid, motivation, "
+            "model, error, created_at, edited_value, approved) VALUES (?,?,?,?,?,?,?,?,?,NULL,NULL) "
+            "ON CONFLICT(product_id, attribute_key) DO UPDATE SET url=excluded.url, "
+            "choice=excluded.choice, valid=excluded.valid, motivation=excluded.motivation, "
+            "model=excluded.model, error=excluded.error, created_at=excluded.created_at, "
+            "edited_value=NULL, approved=NULL",
+            (product_id, attr, url, choice, int(valid), motivation, model, error, _now()))
+
+    def set_attr_edit(self, product_id: str, attr: str, edited_value: str | None,
+                      approved: bool | None) -> None:
+        self.conn.execute(
+            "UPDATE attr_results SET edited_value=?, approved=? WHERE product_id=? AND attribute_key=?",
+            (edited_value, None if approved is None else int(approved), product_id, attr))
+
+    def attr_results(self) -> pd.DataFrame:
+        return pd.read_sql_query("SELECT * FROM attr_results", self.conn)
+
+    def clear_simulated_attr_results(self, sim_model: str) -> int:
+        return self.conn.execute("DELETE FROM attr_results WHERE model=?", (sim_model,)).rowcount
 
     # ------------------------------------------------------------ overzicht
 

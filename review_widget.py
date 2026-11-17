@@ -6,7 +6,7 @@ Werkwijze met het toetsenbord (alle toetsen instelbaar in Instellingen):
 - pijltjes (links/rechts bij horizontale lay-out, omhoog/omlaag bij verticale)
   = vorige/volgende afbeelding; over productgrenzen heen;
 - A = accept, D = deny  → bewaart meteen en springt naar de volgende afbeelding;
-- 1–5 = label rechtstreeks zetten (correctie) → bewaart en springt door;
+- 1–7 = label rechtstreeks zetten (correctie) → bewaart en springt door;
 - spatie = vinkje "gebruik" omschakelen; Backspace = review wissen;
 - PgUp/PgDown = vorig/volgend product.
 
@@ -30,13 +30,14 @@ from PySide6.QtWidgets import (
 
 import pandas as pd
 
-from config import LABELS, USE_LABEL, ClassifierConfig
+from config import LABELS, PACKSHOT_LABELS, ClassifierConfig, is_use_label
 from exporter import UNKNOWN_LABEL, add_effective_columns, slot_prefix
 from store import Store
 
 logger = logging.getLogger(__name__)
 
 NOT_CLASSIFIED = "(niet geclassificeerd)"
+ALL_PACKSHOTS = "alle packshots"
 DECISION_TEXT = {
     "accept": "✔ geaccepteerd",
     "deny": "✖ afgekeurd",
@@ -80,7 +81,7 @@ class ImageCard(QFrame):
         self.combo = QComboBox()
         self.combo.setFocusPolicy(Qt.NoFocus)
         self.combo.addItems(["— label wijzigen —", *LABELS])
-        self.combo.setToolTip("Label manueel corrigeren (of druk 1–5)")
+        self.combo.setToolTip("Label manueel corrigeren (of druk 1–7)")
 
         info = QVBoxLayout()
         for w in (self.title, self.pred, self.status, self.use, self.combo):
@@ -158,7 +159,7 @@ class ReviewWidget(QWidget):
 
         # --- filterbalk
         self.f_label = QComboBox()
-        self.f_label.addItems(["alle labels", *LABELS, NOT_CLASSIFIED])
+        self.f_label.addItems(["alle labels", ALL_PACKSHOTS, *LABELS, NOT_CLASSIFIED])
         self.f_lowconf = QCheckBox("alleen confidence <")
         self.f_conf = QDoubleSpinBox(decimals=2, minimum=0.0, maximum=1.0, singleStep=0.05)
         self.f_conf.setValue(cfg.confidence_threshold)
@@ -293,6 +294,8 @@ class ReviewWidget(QWidget):
         choice = self.f_label.currentText()
         if choice == NOT_CLASSIFIED:
             mask &= t["label"].isna()
+        elif choice == ALL_PACKSHOTS:
+            mask &= t["label"].isin(PACKSHOT_LABELS)
         elif choice in LABELS:
             mask &= t["label"] == choice
         if self.f_lowconf.isChecked():
@@ -457,7 +460,7 @@ class ReviewWidget(QWidget):
             self.table.at[row_idx, "decision"] = None
             self.table.at[row_idx, "final_label"] = None
             self.table.at[row_idx, "review_use"] = None
-            self.table.at[row_idx, "eff_use"] = r["label"] == USE_LABEL
+            self.table.at[row_idx, "eff_use"] = is_use_label(r["label"])
             self.table.at[row_idx, "eff_label"] = r["label"] or ""
         else:
             self.store.set_review(r["product_id"], r["slot"], r["url"], decision, final_label, use)
@@ -473,9 +476,9 @@ class ReviewWidget(QWidget):
             return
         label = self.table.at[idx, "label"]
         if not isinstance(label, str):
-            self.status_message.emit("Geen voorstel om te accepteren; kies een label met 1–5.")
+            self.status_message.emit("Geen voorstel om te accepteren; kies een label met 1–7.")
             return
-        self._save(idx, "accept", label, label == USE_LABEL)
+        self._save(idx, "accept", label, is_use_label(label))
         self.move(+1) if self.pos < len(self.filtered) - 1 else self._render()
 
     def deny_current(self):
@@ -493,7 +496,7 @@ class ReviewWidget(QWidget):
     def _on_label_chosen(self, row_idx: int, label: str, advance: bool = False):
         predicted = self.table.at[row_idx, "label"]
         decision = "accept" if label == predicted else "relabel"
-        self._save(row_idx, decision, label, label == USE_LABEL)
+        self._save(row_idx, decision, label, is_use_label(label))
         if advance and self.pos < len(self.filtered) - 1:
             self.move(+1)
         else:
@@ -509,7 +512,7 @@ class ReviewWidget(QWidget):
         decision = r["decision"] if isinstance(r["decision"], str) else None
         if decision is None:
             if not isinstance(r["label"], str):
-                self.status_message.emit("Kies eerst een label (1–5) voor dit beeld.")
+                self.status_message.emit("Kies eerst een label (1–7) voor dit beeld.")
                 self._render()
                 return
             decision, final = "accept", r["label"]

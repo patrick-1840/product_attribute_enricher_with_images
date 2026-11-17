@@ -9,6 +9,10 @@ Voorbeelden:
     python cli.py stats
     python cli.py export --out "C:/pad/naar/met_labels.xlsx"
 
+    # visuele attribuutverrijking op het packshot (eerste beeld per product)
+    python cli.py enrich --category PERFUME --attributes colorPackaging,shapeOfTheBottle --limit 20 --simulate
+    python cli.py export-attrs --category PERFUME --attributes colorPackaging --out res.xlsx --impex res.impex
+
 Gebruikt dezelfde instellingen (%APPDATA%/ProductImageClassifier/settings.json)
 en dezelfde cache als de desktop-app.
 """
@@ -40,6 +44,8 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("fetch", help="beelden downloaden + thumbnails maken")
     p.add_argument("--limit", type=int)
     p.add_argument("--retry-failed", action="store_true")
+    p.add_argument("--all", action="store_true",
+                   help="alle beelden downloaden (standaard enkel het packshot in modus 'first')")
 
     p = sub.add_parser("classify", help="thumbnails classificeren")
     p.add_argument("--limit", type=int)
@@ -48,6 +54,27 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--escalate", action="store_true")
 
     sub.add_parser("stats", help="voortgang tonen")
+
+    def attr_args(p):
+        p.add_argument("--file", help="productbestand (standaard: uit de instellingen)")
+        p.add_argument("--category", action="append", required=True,
+                       help="mainCategory, bv. PERFUME (meermaals te gebruiken)")
+        p.add_argument("--attributes", required=True, help="kommagescheiden, bv. colorPackaging")
+        p.add_argument("--brand", action="append", help="merkfilter (meermaals te gebruiken)")
+        p.add_argument("--all-values", action="store_true",
+                       help="ook attributen die al een waarde hebben")
+
+    p = sub.add_parser("enrich", help="attributen bepalen op het packshot")
+    attr_args(p)
+    p.add_argument("--limit", type=int, help="max. aantal producten (calls)")
+    p.add_argument("--simulate", action="store_true")
+    p.add_argument("--redo", action="store_true", help="ook producten die al een resultaat hebben")
+    p.add_argument("--model")
+
+    p = sub.add_parser("export-attrs", help="attribuutresultaten naar Excel/impex")
+    attr_args(p)
+    p.add_argument("--out", required=True)
+    p.add_argument("--impex")
 
     p = sub.add_parser("export", help="Excel met labelkolommen schrijven")
     p.add_argument("--out", required=True)
@@ -74,8 +101,9 @@ def main(argv: list[str] | None = None) -> int:
 
     elif args.cmd == "fetch":
         from fetcher import ImageFetcher
+        only_first = cfg.packshot_mode == "first" and cfg.only_fetch_packshots and not args.all
         print(ImageFetcher(cfg).run(retry_failed=args.retry_failed, limit=args.limit,
-                                    progress=_progress))
+                                    progress=_progress, only_first=only_first))
 
     elif args.cmd == "classify":
         from classifier import ImageClassifier
@@ -99,6 +127,41 @@ def main(argv: list[str] | None = None) -> int:
             cfg.product_file = Path(args.file)
         matched, log_path = export_excel(cfg, cfg.product_file, Path(args.out))
         print(f"{matched} rijen met beelden geëxporteerd naar {args.out}; correctielog: {log_path}")
+
+    elif args.cmd in ("enrich", "export-attrs"):
+        from attr_enricher import (AttributeEnricher, attach_packshots, export_attribute_excel,
+                                   export_attribute_impex, results_table, select_packshots)
+        from loader import read_product_file
+        from reference import build_work_items, load_reference_data
+        from store import Store
+        if args.file:
+            cfg.product_file = Path(args.file)
+        ref = load_reference_data(cfg)
+        catalog = read_product_file(cfg.product_file)
+        attrs = [a.strip().lower() for a in args.attributes.split(",") if a.strip()]
+        work = build_work_items(catalog, ref, {c: attrs for c in args.category},
+                                only_empty=not args.all_values, brands=args.brand)
+        if work.empty:
+            print("Geen rijen in de werklijst voor deze selectie.")
+            return 1
+        store = Store(cfg.db_path)
+        work = attach_packshots(work, select_packshots(cfg, store))
+        store.close()
+        print(f"Werklijst: {len(work)} rijen, {work['variant_code'].nunique()} producten, "
+              f"{(work['fetch_status'] == 'ok').sum()} rijen met gedownload packshot.")
+        if args.cmd == "enrich":
+            cfg.use_openai = not args.simulate
+            if args.model:
+                cfg.attribute_model = args.model
+            print(AttributeEnricher(cfg, ref).run(work, limit=args.limit, redo=args.redo,
+                                                  progress=_progress))
+        else:
+            table = results_table(cfg, ref, work)
+            n = export_attribute_excel(table, args.out)
+            print(f"{n} goedgekeurde rijen naar {args.out}")
+            if args.impex:
+                export_attribute_impex(table, args.impex, cfg.impex_catalog)
+                print(f"impex: {args.impex}")
 
     return 0
 
