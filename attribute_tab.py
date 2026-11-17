@@ -96,10 +96,6 @@ class AttributeTab(QWidget):
         b = QPushButton("Toepassen")
         b.clicked.connect(self.refresh_tree)
         row.addWidget(b)
-        b = QPushButton("Prompt en uitleg aanpassen…")
-        b.setToolTip("De instructie aan het model en de uitleg per attribuut zelf aanpassen")
-        b.clicked.connect(self.edit_prompts)
-        row.addWidget(b)
         sl.addLayout(row)
 
         # --- werklijst
@@ -272,6 +268,8 @@ class AttributeTab(QWidget):
         self.options.addItems(opts)
 
     def edit_prompts(self, initial_attr: str | None = None):
+        """Opent het promptvenster (knop bij Instellingen); start bij het
+        attribuut dat in de boom geselecteerd is."""
         from prompt_dialog import PromptDialog
         item = self.tree.currentItem()
         if initial_attr is None and item is not None and item.parent() is not None:
