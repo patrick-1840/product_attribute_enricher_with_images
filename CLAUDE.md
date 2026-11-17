@@ -75,6 +75,11 @@ Afhankelijkheidsrichting: `config` ← `store` ← `loader`/`fetcher`/`classifie
   `enable_sorting`). In de resultatentabel loopt rij → data ALTIJD via
   `Qt.UserRole` van de cel (`_idx_at`/`_row_of`), nooit via het rijnummer:
   de tabel kan gesorteerd zijn. Sorteren uitzetten tijdens vullen/bijwerken.
+  `ExcelFilterHeader`: klik op een kop = menu (sorteren + filteren); filters
+  verbergen rijen en worden na elke sortering opnieuw toegepast (layoutChanged).
+- Attribuut-`confidence` (0–1) komt uit het modelantwoord (`attr_results.confidence`);
+  vervalt bij een manuele aanpassing. Een eigen attribuutprompt zonder
+  "confidence" werkt nog, maar dan blijft de kolom leeg.
 - `desktop_app.py` — hoofdvenster, 5 tabs; één achtergrondtaak tegelijk.
 - `cli.py` — scriptbare variant van dezelfde flow.
 

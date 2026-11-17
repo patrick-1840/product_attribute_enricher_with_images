@@ -42,8 +42,13 @@ overig, met een snelle review via het toetsenbord.
    met het packshot en alle gekozen attributen samen. Test eerst met de
    **simulatiemodus** en een **limiet** (bv. 20 producten). Elk resultaat wordt
    meteen bewaard.
-6. **Controleren** (tab 4). Klik op een kolomkop om te sorteren, nog eens voor
-   aflopend (werkt ook in de categorielijst en de attribuutboom): per rij zie je de gegenereerde waarde, de SAP-code
+6. **Controleren** (tab 4). De kolom *Zekerheid* toont hoe zeker het model was
+   (0–1); de filter *lage zekerheid* toont alles onder de confidence-drempel.
+   Klik op een kolomkop voor een menu zoals in Excel: sorteren, zoeken en
+   waarden aan- of uitvinken (*Kolomfilters wissen* zet alles terug). Toetsen:
+   **spatie** = exportvinkje van de geselecteerde rijen aan/uit, **Enter**/**F2**
+   = waarde bewerken, **Delete** = waarde wissen. *Alles aan-/uitvinken* geldt
+   alleen voor de zichtbare rijen. per rij zie je de gegenereerde waarde, de SAP-code
    en de motivatie, met rechts het packshot en de toegelaten waarden. Pas aan
    door te typen of door een waarde te dubbelklikken (Ctrl+dubbelklik voegt een
    waarde toe bij multi-attributen). Een waarde die niet in de lijst staat, is
