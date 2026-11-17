@@ -594,6 +594,29 @@ class MainWindow(QMainWindow):
         f.addRow("", btn_reset)
         lay.addWidget(g)
 
+        g = QGroupBox("Cache: modelresultaten wissen")
+        gl = QVBoxLayout(g)
+        lbl = QLabel("Wist bewaarde antwoorden van het model, zodat een volgende run ze opnieuw "
+                     "opvraagt (en opnieuw betaalt). Downloads en thumbnails blijven staan.")
+        lbl.setWordWrap(True)
+        gl.addWidget(lbl)
+        self.chk_clear_scope = QCheckBox("alleen de gekozen categorieën (tab 1, stap 2)")
+        self.chk_clear_scope.setChecked(True)
+        self.chk_keep_manual = QCheckBox("manuele aanpassingen in de resultatentabel behouden")
+        self.chk_keep_manual.setChecked(True)
+        gl.addWidget(self.chk_clear_scope)
+        gl.addWidget(self.chk_keep_manual)
+        row = QHBoxLayout()
+        for text, what in (("Attribuutresultaten wissen…", "attr"),
+                           ("Classificaties wissen…", "cls"),
+                           ("Reviews wissen…", "rev")):
+            b = QPushButton(text)
+            b.clicked.connect(lambda _=False, what=what: self._clear_cache(what))
+            row.addWidget(b)
+        row.addStretch()
+        gl.addLayout(row)
+        lay.addWidget(g)
+
         btn_save = QPushButton("Instellingen opslaan")
         btn_save.clicked.connect(self._save_settings)
         lay.addWidget(btn_save)
@@ -601,6 +624,53 @@ class MainWindow(QMainWindow):
                              f"Logbestand: {LOG_FILE}"))
         lay.addStretch()
         return outer
+
+    def _clear_cache(self, what: str):
+        if self.worker is not None and self.worker.isRunning():
+            QMessageBox.information(self, "Bezig", "Wacht tot de lopende taak klaar is (of stop ze).")
+            return
+        from store import Store
+        scoped, keep = self.chk_clear_scope.isChecked(), self.chk_keep_manual.isChecked()
+        store = Store(self.cfg.db_path)
+        try:
+            counts = store.count_cached(scoped, keep)
+            where = ("in de gekozen categorieën (" + (", ".join(store.scope() or []) or "geen") + ")"
+                     if scoped and store.scope() is not None else "in de hele cache")
+            if what == "attr":
+                n, title = counts["attr_results"], "Attribuutresultaten wissen"
+                extra = (f"\n\n{counts['attr_manual']} rij(en) met een manuele aanpassing blijven staan."
+                         if keep and counts["attr_manual"] else
+                         "\n\nOok manuele aanpassingen worden gewist." if counts["attr_manual"] else "")
+                text = f"{n} attribuutresultaten {where} wissen?{extra}"
+            elif what == "cls":
+                n, title = counts["classifications"], "Classificaties wissen"
+                text = (f"De labels van {n} beelden {where} wissen? Reviews blijven bewaard, maar "
+                        "een niet-gereviewd beeld heeft daarna geen voorstel meer tot je opnieuw "
+                        "classificeert.")
+            else:
+                n, title = counts["reviews"], "Reviews wissen"
+                text = (f"{n} reviews (jouw accept/deny/labels/packshotkeuzes) {where} wissen? "
+                        "Dit is handwerk en kan niet ongedaan gemaakt worden.")
+            if not n:
+                QMessageBox.information(self, title, f"Niets te wissen {where}.")
+                return
+            if QMessageBox.question(self, title, text) != QMessageBox.Yes:
+                return
+            if what == "attr":
+                done = store.clear_attr_results(scoped, keep)
+            elif what == "cls":
+                done = store.clear_classifications(scoped)
+            else:
+                done = store.clear_reviews(scoped)
+        finally:
+            store.close()
+        logger.info("%s: %d rijen gewist (%s)", title, done, where)
+        self.refresh_stats()
+        self.refresh_categories()
+        self.review.reload(keep_position=False)
+        if self.attr_tab.work is not None:
+            self.results_tab.reload()
+        self.statusBar().showMessage(f"{title}: {done} gewist.", 8000)
 
     def _file_field(self, form: QFormLayout, label: str, value) -> QLineEdit:
         ed = QLineEdit(str(value))

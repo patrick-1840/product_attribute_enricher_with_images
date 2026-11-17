@@ -9,6 +9,7 @@ Voorbeelden:
     python cli.py classify --limit 50 --simulate      # testrun zonder API-kosten
     python cli.py classify --model gpt-4o-mini
     python cli.py stats
+    python cli.py clear --attributes                  # attribuutresultaten (gekozen categorieën) wissen
     python cli.py export --out "C:/pad/naar/met_labels.xlsx"
 
     # visuele attribuutverrijking op het packshot (eerste beeld per product)
@@ -62,6 +63,15 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--escalate", action="store_true")
 
     sub.add_parser("stats", help="voortgang tonen")
+
+    p = sub.add_parser("clear", help="bewaarde modelresultaten/reviews wissen (downloads blijven)")
+    p.add_argument("--attributes", action="store_true", help="attribuutresultaten wissen")
+    p.add_argument("--classifications", action="store_true", help="beeldlabels wissen")
+    p.add_argument("--reviews", action="store_true", help="reviews wissen")
+    p.add_argument("--all-categories", action="store_true",
+                   help="hele cache i.p.v. alleen de gekozen categorieën")
+    p.add_argument("--include-manual", action="store_true",
+                   help="ook attribuutrijen met een manuele aanpassing wissen")
 
     def attr_args(p):
         p.add_argument("--file", help="productbestand (standaard: uit de instellingen)")
@@ -145,6 +155,23 @@ def main(argv: list[str] | None = None) -> int:
         if args.escalate:
             cfg.escalate = True
         print(ImageClassifier(cfg).run(limit=args.limit, progress=_progress))
+
+    elif args.cmd == "clear":
+        from store import Store
+        if not (args.attributes or args.classifications or args.reviews):
+            print("Kies minstens één van --attributes, --classifications, --reviews.")
+            return 1
+        store = Store(cfg.db_path)
+        scoped = not args.all_categories
+        try:
+            if args.attributes:
+                print("attribuutresultaten gewist:", store.clear_attr_results(scoped, not args.include_manual))
+            if args.classifications:
+                print("classificaties gewist:", store.clear_classifications(scoped))
+            if args.reviews:
+                print("reviews gewist:", store.clear_reviews(scoped))
+        finally:
+            store.close()
 
     elif args.cmd == "stats":
         from store import Store

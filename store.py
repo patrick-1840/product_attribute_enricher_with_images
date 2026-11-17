@@ -319,6 +319,57 @@ class Store:
     def clear_simulated_attr_results(self, sim_model: str) -> int:
         return self.conn.execute("DELETE FROM attr_results WHERE model=?", (sim_model,)).rowcount
 
+    # ------------------------------------------------------------ wissen
+
+    def _scope_urls(self, scoped: bool) -> str:
+        return (f"(SELECT it.url FROM items it WHERE {self._IN_SCOPE})" if scoped
+                else "(SELECT url FROM images)")
+
+    def _scope_products(self, scoped: bool) -> str:
+        # alias "it" zodat _IN_SCOPE ook op de productentabel werkt
+        return (f"(SELECT it.product_id FROM products it WHERE {self._IN_SCOPE})" if scoped
+                else "(SELECT product_id FROM attr_results UNION SELECT product_id FROM reviews)")
+
+    _KEEP_MANUAL = " AND edited_value IS NULL AND COALESCE(model, '') <> 'manueel'"
+
+    def count_cached(self, scoped: bool, keep_manual: bool = True) -> dict[str, int]:
+        """Hoeveel modelresultaten/reviews er gewist zouden worden."""
+        one = lambda q: self.conn.execute(q).fetchone()[0]  # noqa: E731
+        manual = self._KEEP_MANUAL if keep_manual else ""
+        return {
+            "classifications": one(
+                f"SELECT COUNT(*) FROM images WHERE url IN {self._scope_urls(scoped)} "
+                "AND (label IS NOT NULL OR classify_error IS NOT NULL)"),
+            "attr_results": one(
+                f"SELECT COUNT(*) FROM attr_results WHERE product_id IN "
+                f"{self._scope_products(scoped)}{manual}"),
+            "attr_manual": one(
+                f"SELECT COUNT(*) FROM attr_results WHERE product_id IN {self._scope_products(scoped)} "
+                "AND (edited_value IS NOT NULL OR model = 'manueel')"),
+            "reviews": one(
+                f"SELECT COUNT(*) FROM reviews WHERE product_id IN {self._scope_products(scoped)}"),
+        }
+
+    def clear_classifications(self, scoped: bool) -> int:
+        """Wist labels/antwoorden van het classificatiemodel (downloads blijven)."""
+        return self.conn.execute(
+            "UPDATE images SET label=NULL, confidence=NULL, model=NULL, first_label=NULL, "
+            "first_confidence=NULL, first_model=NULL, raw_response=NULL, classify_error=NULL, "
+            f"classified_at=NULL WHERE url IN {self._scope_urls(scoped)} "
+            "AND (label IS NOT NULL OR classify_error IS NOT NULL)").rowcount
+
+    def clear_attr_results(self, scoped: bool, keep_manual: bool = True) -> int:
+        """Wist attribuutresultaten van het model. ``keep_manual``: rijen met een
+        manuele aanpassing in de resultatentabel blijven staan."""
+        manual = self._KEEP_MANUAL if keep_manual else ""
+        return self.conn.execute(
+            f"DELETE FROM attr_results WHERE product_id IN {self._scope_products(scoped)}{manual}"
+        ).rowcount
+
+    def clear_reviews(self, scoped: bool) -> int:
+        return self.conn.execute(
+            f"DELETE FROM reviews WHERE product_id IN {self._scope_products(scoped)}").rowcount
+
     # ------------------------------------------------------------ overzicht
 
     def item_table(self, scoped: bool = True) -> pd.DataFrame:

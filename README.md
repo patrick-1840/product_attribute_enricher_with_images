@@ -53,7 +53,7 @@ overig, met een snelle review via het toetsenbord.
 
 ### Prompt en uitleg aanpassen
 
-Met *Prompt en uitleg aanpassen…* (tab Attributen, of bij Instellingen) stuur je
+Met *Prompts en uitleg per attribuut aanpassen…* bij Instellingen stuur je
 het model bij:
 
 - **Uitleg per attribuut**: wat het model precies moet bekijken. Voorbeeld voor
