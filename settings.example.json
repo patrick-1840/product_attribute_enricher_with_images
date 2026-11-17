@@ -1,0 +1,22 @@
+{
+  "_uitleg": "De app bewaart deze instellingen automatisch in %APPDATA%/ProductImageClassifier/settings.json. Dit voorbeeld toont welke velden er zijn; je hoeft het niet handmatig aan te maken. De API-key staat NIET hier maar in %APPDATA%/ProductImageClassifier/.env.",
+  "product_file": "C:/pad/naar/wekelijks productoverzicht met alle attributen.xlsx",
+  "cache_dir": "C:/Users/<naam>/AppData/Local/ProductImageClassifier/cache",
+  "last_export_dir": "C:/pad/naar/exports",
+  "id_column": "variant_code",
+  "extra_image_columns": ["mainImageLink"],
+  "info_columns": ["brand", "productName", "mainCategory"],
+  "concurrent_downloads": 10,
+  "openai_model": "gpt-4o-mini",
+  "concurrent_requests": 10,
+  "escalate": false,
+  "escalation_model": "gpt-4o",
+  "confidence_threshold": 0.7,
+  "layout_orientation": "horizontal",
+  "shortcuts": {
+    "accept": "A", "deny": "D", "toggle_use": "Space",
+    "next_h": "Right", "prev_h": "Left", "next_v": "Down", "prev_v": "Up",
+    "next_product": "PgDown", "prev_product": "PgUp", "undo": "Backspace",
+    "label_1": "1", "label_2": "2", "label_3": "3", "label_4": "4", "label_5": "5"
+  }
+}

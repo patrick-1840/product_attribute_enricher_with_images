@@ -1,0 +1,34 @@
+# secrets
+.env
+.env-*
+
+# per-gebruiker instellingen — leven in %APPDATA%, maar voor de zekerheid:
+/settings.json
+
+# gegenereerde output en cache
+*_met_beeldlabels.*
+*_correcties.csv
+cache/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.log
+
+# bron- en datadata (niet in versiebeheer)
+sources/*.xlsx
+sources/*.xlsm
+sources/*.csv
+*.xlsx
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# PyInstaller-buildoutput (zie build.ps1)
+build/
+dist/
+
+# Andere
+_archive/

@@ -1,0 +1,3 @@
+# Extra afhankelijkheid, enkel nodig om de .exe te compileren (niet om de app
+# te draaien). Zie build.ps1 / CLAUDE.md ("Distributie").
+pyinstaller>=6.14
