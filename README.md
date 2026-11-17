@@ -1,64 +1,117 @@
 # Product Image Classifier
 
-Selecteert per product de bruikbare productafbeeldingen (**packshots**) uit de
-productlijst van ICI PARIS XL, als voorbereiding op visuele attribuutverrijking.
-Elke afbeelding krijgt automatisch een label (packshot, sfeerbeeld, swatch,
-tekst, overig) met een confidence. Daarna beoordeel je ze snel met het
-toetsenbord. Het resultaat is per afbeelding een label en een vinkje
-"gebruik voor attributie".
+Vult productattributen aan die je op de **productfoto (packshot)** kan zien,
+zoals de kleur van de verpakking (`colorPackaging`), de vorm van de fles
+(`shapeOfTheBottle`) of het type dispenser (`typeDispenser`). Het werkt zoals
+de Product Attribute Enricher: je kiest per categorie welke attributen gevuld
+worden, het model kiest alleen uit de toegelaten waarden van SAP Commerce, je
+controleert het resultaat, en je exporteert naar Excel en impex (met SAP-codes).
+Het verschil is dat het model naar het productbeeld kijkt in plaats van naar de
+tekst op de productpagina.
 
-Dit programma bouwt verder op de Product Attribute Enricher en gebruikt
-hetzelfde Excel-bestand als invoer.
+Daarnaast kan het programma alle productbeelden classificeren als packshot
+product / packshot verpakking / packshot beide / sfeerbeeld / swatch / tekst /
+overig, met een snelle review via het toetsenbord.
 
 ## Workflow
 
-**laden → downloaden → classificeren → reviewen → exporteren**
+**inlezen → categorieën kiezen → packshots downloaden → attributen kiezen → verrijken → controleren → exporteren**
 
-1. **Laden** (tab 1): kies het productbestand en klik *Inlezen*. Het programma
-   zoekt zelf de beeldkolommen (`product image N` of `imageLinkN`, plus
-   `mainImageLink`) en bouwt een werklijst: één regel per product × afbeelding.
-   Lege cellen en ongeldige URL's worden overgeslagen.
-2. **Downloaden**: *Start downloaden* haalt elke unieke afbeelding één keer
-   op en bewaart een kleine versie (max. 512 px) in de cachemap. Je kunt
-   pauzeren, hervatten en stoppen. Wat al binnen is, wordt de volgende keer
-   overgeslagen. Mislukte downloads staan in `mislukte_urls.csv` in de cachemap.
-   Vink *mislukte opnieuw proberen* aan om ze opnieuw te proberen.
-3. **Classificeren**: *Start classificatie* stuurt elke thumbnail naar OpenAI
-   (standaard `gpt-4o-mini`, `detail: low`). Test eerst met de
-   **simulatiemodus** en een **limiet** (bv. 50). Elk resultaat wordt meteen
-   bewaard, dus stoppen of een crash verliest niets. Optioneel kun je in de
-   instellingen *escalatie* aanzetten: beelden onder de confidence-drempel
-   gaan dan nog eens naar een sterker model.
-4. **Reviewen** (tab 2): per product staan de afbeeldingen naast elkaar, met
-   het voorgestelde label en de confidence (groen/oranje/rood). Voorgestelde
-   packshots zijn standaard aangevinkt. Filter op label, op lage confidence
-   of op "alleen niet gereviewd", en klik *Toepassen*.
-5. **Exporteren**: *Exporteer als…* schrijft een kopie van het originele Excel
-   met per afbeelding de kolommen `image N label` en `image N use`
-   (true/false). Ernaast komt `<naam>_correcties.csv`: alle handmatig
-   beoordeelde beelden met voorstel én eindbeslissing, bruikbaar als
-   trainingsdata.
+1. **Inlezen** (tab 1): kies het productbestand (de wekelijkse productlijst) en
+   klik *Inlezen*. Het programma herkent zelf de beeldkolommen
+   (`mainImageLink`, `imageLink1`...`5`, of `product image N`) en leest meteen de
+   referentiebestanden (attribuuttypes en SAP-mapping, dezelfde als die van de
+   attribuutverrijker; je kiest ze bij Instellingen).
+2. **Categorieën kiezen** (tab 1, stap 2): vink aan met welke productcategorieën
+   (`mainCategory`) je werkt, bv. alleen PERFUME. Per categorie zie je hoeveel
+   producten er zijn en hoeveel beelden al gedownload en geclassificeerd zijn.
+   Downloaden, classificeren, de review en de attribuutboom werken daarna
+   **alleen op die categorieën**. Na de eerste keer inlezen staat er nog niets
+   aangevinkt. De keuze wordt bewaard in de cache. Wat je eerder voor andere
+   categorieën deed, blijft bewaard.
+3. **Packshots downloaden**: *Start downloaden* met *alleen packshots* aangevinkt
+   haalt per product het eerste beeld op (de front-foto). Je kunt pauzeren en
+   stoppen. Wat al binnen is, wordt overgeslagen.
+4. **Attributen kiezen** (tab 3): de boom toont per categorie alleen de
+   attributen die volgens de SAP-matrix bij die categorie horen, met de
+   vulgraad. Visuele attributen (oog-icoon) staan standaard aan. Klik een
+   attribuut aan om rechts de **toegelaten waarden** te zien: alleen die mag het
+   model teruggeven. Optioneel kun je een merkfilter zetten en "alleen lege
+   waarden" gebruiken. Klik daarna *Werklijst opbouwen*.
+5. **Verrijken**: *Start verrijking*. Per product gaat er één vraag naar het model,
+   met het packshot en alle gekozen attributen samen. Test eerst met de
+   **simulatiemodus** en een **limiet** (bv. 20 producten). Elk resultaat wordt
+   meteen bewaard.
+6. **Controleren** (tab 4). Klik op een kolomkop om te sorteren, nog eens voor
+   aflopend (werkt ook in de categorielijst en de attribuutboom): per rij zie je de gegenereerde waarde, de SAP-code
+   en de motivatie, met rechts het packshot en de toegelaten waarden. Pas aan
+   door te typen of door een waarde te dubbelklikken (Ctrl+dubbelklik voegt een
+   waarde toe bij multi-attributen). Een waarde die niet in de lijst staat, is
+   rood en gaat niet mee.
+7. **Exporteren**: *Exporteer Excel...* (zelfde kolommen als de attribuutverrijker,
+   plus de packshot-URL) en *Exporteer impex...* (zelfde impexformaat).
 
-## Sneltoetsen in de review
+### Prompt en uitleg aanpassen
 
-| Toets | Actie |
+Met *Prompts en uitleg per attribuut aanpassen…* bij Instellingen stuur je
+het model bij:
+
+- **Uitleg per attribuut**: wat het model precies moet bekijken. Voorbeeld voor
+  `colorPackaging`: alleen de 1–2 dominante kleuren van de verpakking, geen
+  gedrukte tekst of logo's (dat is nu ook de standaard). Maak het veld leeg om
+  geen uitleg mee te geven.
+- **Attribuutprompt** en **classificatieprompt**: de volledige instructie.
+- **Voorbeeld**: de prompt zoals hij naar het model gaat.
+
+Alleen wat afwijkt van de standaard wordt bewaard. Met *Standaard herstellen*
+ga je terug. Reeds verwerkte producten veranderen niet: herdoe ze met *ook
+reeds verwerkte opnieuw* (test eerst met een limiet).
+
+### Optioneel: beelden classificeren en reviewen
+
+Wil je niet blindelings het eerste beeld als packshot gebruiken? Download dan
+alle beelden van de gekozen categorieën, laat ze classificeren (tab 1, stap 4), review ze in tab 2 en zet
+bij Instellingen *Packshot =* op "eerste beeld met vinkje 'gebruik'". Elk van de
+drie packshot-labels (product, verpakking, beide) krijgt standaard het vinkje.
+Via *Exporteer als...* in tab 1 schrijf je de beeldlabels terug naar het Excel
+(`image N label` / `image N use`), samen met een correctielog als trainingsdata.
+
+## Packshot-review (tab 2)
+
+Een doorscrolbare lijst met één rij per product en alle beelden naast elkaar.
+Het beeld dat de attribuutverrijking als packshot gebruikt, heeft een **groene
+rand en een ★**. Beelden zonder vinkje "gebruik" zijn gedimd. Je scrollt snel
+door de lijst (muiswiel, PgUp/PgDown) en grijpt alleen in waar het packshot
+fout is. Daarna keur je de rest in één keer goed met **Goedkeuren tot hier**.
+
+Handige filters: *alleen twijfelgevallen* (geen packshot, packshot is niet het
+eerste beeld, of een beeld onder de confidence-drempel) en *alleen niet
+gereviewd*. Met *Beeldgrootte* zet je meer producten op één scherm.
+
+| Toets / muis | Actie |
 |---|---|
-| ← / → (horizontaal) of ↑ / ↓ (verticaal) | vorige / volgende afbeelding |
-| **A** | accept: voorgesteld label goedkeuren, door naar de volgende afbeelding |
-| **D** | deny: voorgesteld label afkeuren (label "onbekend", vinkje uit), door naar de volgende afbeelding |
-| **1–5** | label zetten op packshot / sfeerbeeld / swatch / tekst / overig, door naar de volgende afbeelding |
+| muiswiel, PgUp / PgDown, Home / End | snel scrollen |
+| ↑ / ↓ | vorig / volgend product |
+| ← / → | vorige / volgende afbeelding |
+| klik | afbeelding selecteren |
+| **dubbelklik** of **P** | deze afbeelding als packshot kiezen (de andere beelden van het product krijgen geen vinkje meer) |
+| **Enter** | product goedkeuren (alle voorstellen) en naar het volgende product |
+| rechtsklik | menu: packshot, vinkje, accept/deny, label, review wissen |
+| A / D | voorstel van de afbeelding goedkeuren / afkeuren |
+| 1–7 | label zetten op packshot product / verpakking / beide / sfeerbeeld / swatch / tekst / overig |
 | Spatie | vinkje "gebruik voor attributie" omschakelen |
-| Backspace | review van de huidige afbeelding wissen |
-| PgUp / PgDown | vorig / volgend product |
+| Backspace | review van de afbeelding wissen |
 
-Alle toetsen en de oriëntatie (horizontaal/verticaal) stel je in bij
-**Instellingen**. Ze worden onthouden.
+Alle toetsen stel je in bij **Instellingen**. Ze worden onthouden. Let op:
+de keuze van het packshot telt alleen als *Packshot =* bij Instellingen op
+"eerste beeld met vinkje 'gebruik'" staat. In de modus "eerste beeld" wordt
+altijd het eerste beeld gebruikt.
 
 ## Instellingen (tab 3)
 
 API-key, model, aantal gelijktijdige calls, escalatiemodel, confidence-drempel,
-cachemap, aantal gelijktijdige downloads, product-id-kolom, extra beeldkolommen,
-lay-out en sneltoetsen.
+cachemap, aantal gelijktijdige downloads, product-id-kolom, extra beeldkolommen
+en sneltoetsen.
 
 - Instellingen: `%APPDATA%\ProductImageClassifier\settings.json`
 - API-key: `%APPDATA%\ProductImageClassifier\.env` (of een `.env` naast het programma)
@@ -66,6 +119,10 @@ lay-out en sneltoetsen.
   `state.sqlite` met downloads, labels en reviews). Zet deze map liefst niet in
   OneDrive, want het gaat om tienduizenden kleine bestanden.
 - Log: `%APPDATA%\ProductImageClassifier\logs\app.log`
+- **Modelresultaten wissen** (blok *Cache* bij Instellingen): wist de bewaarde
+  attribuutresultaten, classificaties of reviews, standaard alleen voor de
+  gekozen categorieën en met behoud van manuele aanpassingen. Een volgende run
+  vraagt ze opnieuw op (en betaalt opnieuw). Downloads blijven staan.
 
 ## Kosten en schaal
 

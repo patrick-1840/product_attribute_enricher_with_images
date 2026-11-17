@@ -12,11 +12,12 @@
   "escalate": false,
   "escalation_model": "gpt-4o",
   "confidence_threshold": 0.7,
-  "layout_orientation": "horizontal",
+  "review_thumb_px": 140,
   "shortcuts": {
-    "accept": "A", "deny": "D", "toggle_use": "Space",
-    "next_h": "Right", "prev_h": "Left", "next_v": "Down", "prev_v": "Up",
-    "next_product": "PgDown", "prev_product": "PgUp", "undo": "Backspace",
-    "label_1": "1", "label_2": "2", "label_3": "3", "label_4": "4", "label_5": "5"
+    "prod_next": "Down", "prod_prev": "Up", "img_next": "Right", "img_prev": "Left",
+    "accept_product": "Return", "set_packshot": "P",
+    "accept": "A", "deny": "D", "toggle_use": "Space", "undo": "Backspace",
+    "label_1": "1", "label_2": "2", "label_3": "3", "label_4": "4", "label_5": "5",
+    "label_6": "6", "label_7": "7"
   }
 }

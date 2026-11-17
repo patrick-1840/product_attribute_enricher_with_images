@@ -22,7 +22,7 @@ from urllib.parse import urlparse
 
 import pandas as pd
 
-from config import ClassifierConfig
+from config import CATEGORY_COLUMN, ClassifierConfig
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +126,8 @@ def build_image_table(df: pd.DataFrame, cfg: ClassifierConfig
         if pid in products:
             report.duplicate_ids += 1
         else:
-            products[pid] = (row_order, {c: str(rec[c]) for c in info_cols})
+            products[pid] = (row_order, {c: str(rec[c]) for c in info_cols},
+                             str(rec.get(CATEGORY_COLUMN) or "").strip().upper())
         for col in cols:
             raw = str(rec.get(col.source_col) or "").strip()
             if not raw or raw.lower() in ("nan", "none"):
@@ -142,8 +143,8 @@ def build_image_table(df: pd.DataFrame, cfg: ClassifierConfig
 
     items_df = pd.DataFrame(items, columns=["product_id", "slot", "position", "source_col", "url"])
     products_df = pd.DataFrame(
-        [(pid, o, info) for pid, (o, info) in products.items()],
-        columns=["product_id", "row_order", "info"])
+        [(pid, o, info, cat) for pid, (o, info, cat) in products.items()],
+        columns=["product_id", "row_order", "info", "category"])
     report.products = len(products_df)
     report.images = len(items_df)
     report.unique_urls = items_df["url"].nunique() if len(items_df) else 0

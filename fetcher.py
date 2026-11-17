@@ -72,12 +72,13 @@ class ImageFetcher:
         self.control = control or RunControl()
 
     def run(self, retry_failed: bool = False, limit: int | None = None,
-            progress: ProgressFn | None = None) -> dict[str, int]:
-        """Blokkerend; draait in een worker-thread (of de CLI)."""
-        return asyncio.run(self._run(retry_failed, limit, progress))
+            progress: ProgressFn | None = None, only_first: bool = False) -> dict[str, int]:
+        """Blokkerend; draait in een worker-thread (of de CLI).
+        ``only_first``: alleen het eerste beeld per product (packshot-modus "first")."""
+        return asyncio.run(self._run(retry_failed, limit, progress, only_first))
 
     async def _run(self, retry_failed: bool, limit: int | None,
-                   progress: ProgressFn | None) -> dict[str, int]:
+                   progress: ProgressFn | None, only_first: bool = False) -> dict[str, int]:
         store = Store(self.cfg.db_path)
         thumbs = self.cfg.thumbs_dir
         thumbs.mkdir(parents=True, exist_ok=True)
@@ -85,7 +86,7 @@ class ImageFetcher:
             reset = store.reset_missing_thumbs(thumbs)
             if reset:
                 logger.info("%d beelden opnieuw in de wachtrij (thumbnail ontbrak).", reset)
-            urls = store.urls_to_fetch(retry_failed=retry_failed)
+            urls = store.urls_to_fetch(retry_failed=retry_failed, only_first=only_first)
             if limit:
                 urls = urls[:limit]
             total = len(urls)

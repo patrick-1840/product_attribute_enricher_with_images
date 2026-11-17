@@ -32,3 +32,6 @@ dist/
 
 # Andere
 _archive/
+
+# attribuutexport
+*.impex
