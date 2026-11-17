@@ -119,6 +119,10 @@ en sneltoetsen.
   `state.sqlite` met downloads, labels en reviews). Zet deze map liefst niet in
   OneDrive, want het gaat om tienduizenden kleine bestanden.
 - Log: `%APPDATA%\ProductImageClassifier\logs\app.log`
+- **Modelresultaten wissen** (blok *Cache* bij Instellingen): wist de bewaarde
+  attribuutresultaten, classificaties of reviews, standaard alleen voor de
+  gekozen categorieën en met behoud van manuele aanpassingen. Een volgende run
+  vraagt ze opnieuw op (en betaalt opnieuw). Downloads blijven staan.
 
 ## Kosten en schaal
 

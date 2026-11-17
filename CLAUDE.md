@@ -30,6 +30,7 @@ python cli.py categories --set PERFUME                  # alleen deze categorie(
 python cli.py fetch --limit 50                          # downloaden + thumbnails
 python cli.py classify --limit 50 --simulate            # testrun zonder API-kosten
 python cli.py stats
+python cli.py clear --attributes                        # modelresultaten wissen (gekozen categorieën)
 python cli.py export --out "pad/naar/met_labels.xlsx"
 python cli.py enrich --category PERFUME --attributes colorPackaging,shapeOfTheBottle --limit 20 --simulate
 python cli.py export-attrs --category PERFUME --attributes colorPackaging --out res.xlsx --impex res.impex
