@@ -5,8 +5,13 @@ from __future__ import annotations
 
 import logging
 
-from PySide6.QtCore import QThread, Signal
-from PySide6.QtWidgets import QGroupBox, QHBoxLayout, QLabel, QProgressBar, QPushButton, QVBoxLayout
+import re
+
+from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtWidgets import (
+    QGroupBox, QHBoxLayout, QLabel, QProgressBar, QPushButton, QTableWidgetItem, QTreeWidgetItem,
+    QVBoxLayout,
+)
 
 from runcontrol import RunControl
 
@@ -64,3 +69,50 @@ class StepBox(QGroupBox):
         self.btn_pause.setEnabled(running)
         self.btn_stop.setEnabled(running)
         self.btn_pause.setText("Pauzeer")
+
+
+# ================================================================= sorteren
+
+#: Rol met een expliciete sorteersleutel (getal of tekst). Zonder deze rol
+#: sorteert een cel op haar tekst: numeriek als die met een getal begint,
+#: anders alfabetisch zonder hoofdlettergevoeligheid.
+SORT_ROLE = Qt.UserRole + 100
+_NUM_RE = re.compile(r"^\s*(-?\d+(?:[.,]\d+)?)")
+
+
+def sort_key(value):
+    """(0, getal) sorteert vóór (1, tekst); lege waarden altijd achteraan."""
+    if value is None or value == "":
+        return (2, "")
+    if isinstance(value, (int, float)):
+        return (0, float(value))
+    m = _NUM_RE.match(str(value))
+    if m:
+        return (0, float(m.group(1).replace(",", ".")))
+    return (1, str(value).casefold())
+
+
+class SortableTableItem(QTableWidgetItem):
+    def __lt__(self, other):
+        a = self.data(SORT_ROLE)
+        b = other.data(SORT_ROLE)
+        return sort_key(self.text() if a is None else a) < sort_key(other.text() if b is None else b)
+
+
+class SortableTreeItem(QTreeWidgetItem):
+    def __lt__(self, other):
+        col = self.treeWidget().sortColumn() if self.treeWidget() else 0
+        a = self.data(col, SORT_ROLE)
+        b = other.data(col, SORT_ROLE)
+        return (sort_key(self.text(col) if a is None else a)
+                < sort_key(other.text(col) if b is None else b))
+
+
+def enable_sorting(view) -> None:
+    """Klik op een kolomkop = oplopend, nog eens = aflopend. Start ZONDER
+    sortering (de oorspronkelijke volgorde blijft tot je op een kop klikt)."""
+    header = view.horizontalHeader() if hasattr(view, "horizontalHeader") else view.header()
+    header.setSortIndicator(-1, Qt.AscendingOrder)
+    header.setSortIndicatorShown(True)
+    header.setSectionsClickable(True)
+    view.setSortingEnabled(True)

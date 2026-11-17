@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
 import pandas as pd
 
 from config import VISUAL_ATTRIBUTES, ClassifierConfig
-from qt_common import StepBox
+from qt_common import SORT_ROLE, SortableTableItem, SortableTreeItem, StepBox, enable_sorting
 from reference import CATEGORY_COLUMN, ReferenceData, fill_rates
 
 logger = logging.getLogger(__name__)
@@ -59,6 +59,7 @@ class AttributeTab(QWidget):
         self.tree.setHeaderLabels(["Categorie / attribuut", "Type", "Opties", "% gevuld"])
         self.tree.setColumnWidth(0, 360)
         self.tree.currentItemChanged.connect(self._show_options)
+        enable_sorting(self.tree)
         self.options = QListWidget()
         self.options_title = QLabel("<b>Toegelaten waarden</b><br><span style='color:#888'>"
                                     "Klik een attribuut aan. Het model mag ALLEEN deze waarden "
@@ -177,6 +178,7 @@ class AttributeTab(QWidget):
         previous = self._selection() if self.tree.topLevelItemCount() else None
         cat = self._filtered_catalog()
         self.rates = fill_rates(cat, self.ref)
+        self.tree.setSortingEnabled(False)
         self.tree.clear()
         if cat.empty:
             ph = QTreeWidgetItem(["(geen producten — kies categorieën in tab 1, stap 2)", "", "", ""])
@@ -187,7 +189,8 @@ class AttributeTab(QWidget):
         bold.setBold(True)
         counts = cat[CATEGORY_COLUMN].astype(str).value_counts()
         for category in sorted(c for c in counts.index if c.strip()):
-            top = QTreeWidgetItem([f"{category}  ({counts[category]} producten)", "", "", ""])
+            top = SortableTreeItem([f"{category}  ({counts[category]} producten)", "", "", ""])
+            top.setData(0, SORT_ROLE, category)
             top.setFont(0, bold)
             top.setFlags(top.flags() | Qt.ItemIsAutoTristate | Qt.ItemIsUserCheckable)
             top.setData(0, Qt.UserRole, category)
@@ -203,7 +206,7 @@ class AttributeTab(QWidget):
             for attr in sorted(allowed, key=lambda a: (a not in VISUAL_ATTRIBUTES, a)):
                 pct = self.rates.get((category, attr), 0.0)
                 name = self.ref.display_name(attr)
-                child = QTreeWidgetItem([("👁 " if attr in VISUAL_ATTRIBUTES else "    ") + name,
+                child = SortableTreeItem([("👁 " if attr in VISUAL_ATTRIBUTES else "    ") + name,
                                          self.ref.attribute_type(attr),
                                          str(len(self.ref.options_for(attr))), f"{pct:.0f}%"])
                 child.setFlags(child.flags() | Qt.ItemIsUserCheckable)
@@ -213,9 +216,12 @@ class AttributeTab(QWidget):
                     on = attr in VISUAL_ATTRIBUTES
                 child.setCheckState(0, Qt.Checked if on else Qt.Unchecked)
                 child.setData(0, Qt.UserRole, attr)
+                child.setData(0, SORT_ROLE, name)
+                child.setData(3, SORT_ROLE, pct)
                 child.setForeground(3, QColor.fromHsv(int(pct * 1.2), 200, 180))
                 top.addChild(child)
         self.tree.collapseAll()
+        self.tree.setSortingEnabled(True)
 
     def _iter_children(self):
         for i in range(self.tree.topLevelItemCount()):
@@ -341,7 +347,7 @@ class ResultsTab(QWidget):
         self.attr_tab = attr_tab
         self.host = host
         self.table_df: pd.DataFrame = pd.DataFrame()
-        self.view_idx: list[int] = []
+        self.view_idx: list[int] = []      # getoonde dataframe-indices (ongesorteerd)
         self._loading = False
 
         self.f_attr = QComboBox()
@@ -377,6 +383,7 @@ class ResultsTab(QWidget):
         self.grid.setSelectionBehavior(QTableWidget.SelectRows)
         self.grid.itemChanged.connect(self._on_item_changed)
         self.grid.currentCellChanged.connect(lambda r, *_: self._show_row(r))
+        enable_sorting(self.grid)
 
         self.preview = QLabel(alignment=Qt.AlignCenter)
         self.preview.setFixedSize(340, 340)
@@ -450,21 +457,23 @@ class ResultsTab(QWidget):
 
         self._loading = True
         self.grid.setUpdatesEnabled(False)
+        self.grid.setSortingEnabled(False)      # tijdens het vullen niet hersorteren
         self.grid.setRowCount(len(self.view_idx))
         red = QColor(192, 57, 43)
         for r, idx in enumerate(self.view_idx):
             row = t.loc[idx]
             for c, (key, _) in enumerate(self.COLUMNS):
                 if key == "approved":
-                    item = QTableWidgetItem()
+                    item = SortableTableItem()
                     item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled | Qt.ItemIsSelectable)
                     item.setCheckState(Qt.Checked if row["approved"] else Qt.Unchecked)
+                    item.setData(SORT_ROLE, int(bool(row["approved"])))
                 else:
                     v = row[key]
                     text = "" if v is None or (isinstance(v, float) and pd.isna(v)) else str(v)
                     if key == "motivation" and isinstance(row["error"], str):
                         text = f"FOUT: {row['error']}"
-                    item = QTableWidgetItem(text)
+                    item = SortableTableItem(text)
                     if key == "generated value":
                         item.setFlags(item.flags() | Qt.ItemIsEditable)
                         if text and not row["valid"]:
@@ -473,6 +482,7 @@ class ResultsTab(QWidget):
                         item.setFlags(item.flags() & ~Qt.ItemIsEditable)
                 item.setData(Qt.UserRole, idx)
                 self.grid.setItem(r, c, item)
+        self.grid.setSortingEnabled(True)       # past de gekozen sortering opnieuw toe
         self.grid.setUpdatesEnabled(True)
         self._loading = False
         if len(self.view_idx) < 3000:
@@ -492,8 +502,11 @@ class ResultsTab(QWidget):
         t = self.table_df
         if col == 0:
             t.at[idx, "approved"] = item.checkState() == Qt.Checked
+            self._loading = True
+            item.setData(SORT_ROLE, int(t.at[idx, "approved"]))
+            self._loading = False
         elif col == self.VALUE_COL:
-            self._set_value(idx, item.text().strip(), refresh_row=item.row())
+            self._set_value(idx, item.text().strip(), refresh=True)
             return
         else:
             return
@@ -502,7 +515,7 @@ class ResultsTab(QWidget):
     def _has_result(self, idx: int) -> bool:
         return isinstance(self.table_df.at[idx, "model"], str)
 
-    def _set_value(self, idx: int, value: str, refresh_row: int | None = None):
+    def _set_value(self, idx: int, value: str, refresh: bool = True):
         from reference import sap_codes, validate_choice
         ref = self.attr_tab.ref
         t = self.table_df
@@ -511,8 +524,8 @@ class ResultsTab(QWidget):
         if not self._has_result(idx) and not isinstance(url, str):
             QMessageBox.information(self, "Geen packshot", "Dit product heeft geen packshot; "
                                     "een manuele waarde kan pas na het downloaden bewaard worden.")
-            if refresh_row is not None:
-                self._refresh_row(refresh_row, idx)
+            if refresh:
+                self._refresh_row(idx)
             return
         norm, valid = validate_choice(value or None, ref.options_for(attr))
         t.at[idx, "generated value"] = norm
@@ -528,8 +541,8 @@ class ResultsTab(QWidget):
             st.close()
             t.at[idx, "model"] = "manueel"
         self._persist(idx, edited=norm or "")
-        if refresh_row is not None:
-            self._refresh_row(refresh_row, idx)
+        if refresh:
+            self._refresh_row(idx)
 
     def _persist(self, idx: int, edited: str | None = None):
         from store import Store
@@ -549,10 +562,28 @@ class ResultsTab(QWidget):
         finally:
             st.close()
 
-    def _refresh_row(self, r: int, idx: int):
+    def _row_of(self, idx: int) -> int:
+        """Huidig (gesorteerd) rijnummer van dataframe-index ``idx``; -1 als niet getoond."""
+        for r in range(self.grid.rowCount()):
+            it = self.grid.item(r, 0)
+            if it is not None and it.data(Qt.UserRole) == idx:
+                return r
+        return -1
+
+    def _idx_at(self, r: int) -> int | None:
+        it = self.grid.item(r, 0) if r >= 0 else None
+        return None if it is None else it.data(Qt.UserRole)
+
+    def _refresh_row(self, idx: int):
+        r = self._row_of(idx)
+        if r < 0:
+            return
+        # niet hersorteren terwijl we cellen van deze rij aanpassen (rij zou verspringen)
+        self.grid.setSortingEnabled(False)
         self._loading = True
         t = self.table_df
         self.grid.item(r, 0).setCheckState(Qt.Checked if t.at[idx, "approved"] else Qt.Unchecked)
+        self.grid.item(r, 0).setData(SORT_ROLE, int(bool(t.at[idx, "approved"])))
         v = t.at[idx, "generated value"]
         v = v if isinstance(v, str) else ""
         vi = self.grid.item(r, self.VALUE_COL)
@@ -560,12 +591,12 @@ class ResultsTab(QWidget):
         vi.setForeground(QColor(192, 57, 43) if v and not t.at[idx, "valid"] else QColor(0, 0, 0))
         self.grid.item(r, 8).setText(t.at[idx, "new_sap_values"] or "")
         self._loading = False
+        self.grid.setSortingEnabled(True)
 
     def _pick_option(self, item):
-        r = self.grid.currentRow()
-        if r < 0 or r >= len(self.view_idx):
+        idx = self._idx_at(self.grid.currentRow())
+        if idx is None:
             return
-        idx = self.view_idx[r]
         from PySide6.QtWidgets import QApplication
         value = item.text()
         cur = self.table_df.at[idx, "generated value"]
@@ -573,16 +604,22 @@ class ResultsTab(QWidget):
             parts = [p.strip() for p in cur.split(",")]
             if value not in parts:
                 value = ", ".join(parts + [value])
-        self._set_value(idx, value, refresh_row=r)
+        self._set_value(idx, value, refresh=True)
+        r = self._row_of(idx)
+        if r >= 0:
+            self.grid.setCurrentCell(r, self.VALUE_COL)
 
     def _set_all(self, on: bool):
-        for r, idx in enumerate(self.view_idx):
+        self.grid.setSortingEnabled(False)
+        for r in range(self.grid.rowCount()):
             self.grid.item(r, 0).setCheckState(Qt.Checked if on else Qt.Unchecked)
+        self.grid.setSortingEnabled(True)
 
     def _show_row(self, r: int):
-        if r < 0 or r >= len(self.view_idx):
+        idx = self._idx_at(r)
+        if idx is None:
             return
-        row = self.table_df.loc[self.view_idx[r]]
+        row = self.table_df.loc[idx]
         thumb = row["thumb"]
         path = self.cfg.thumbs_dir / thumb if isinstance(thumb, str) else None
         if path and path.is_file():
