@@ -17,14 +17,14 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
-from config import DEFAULT_CATEGORY_MAPPING, MULTI_VALUE_HINT_ATTRIBUTES, ClassifierConfig
+from config import (CATEGORY_COLUMN, DEFAULT_CATEGORY_MAPPING, MULTI_VALUE_HINT_ATTRIBUTES,
+                    ClassifierConfig)
 
 logger = logging.getLogger(__name__)
 
 warnings.filterwarnings("ignore", message="Workbook contains no default style",
                         category=UserWarning, module="openpyxl")
 
-CATEGORY_COLUMN = "mainCategory"
 PRODUCT_KEY_COLUMNS = [
     "baseProduct", "variant_code", "ean", "brand", "productName", "productUrl",
     CATEGORY_COLUMN,

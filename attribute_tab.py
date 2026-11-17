@@ -48,6 +48,7 @@ class AttributeTab(QWidget):
         self.ref: ReferenceData | None = None
         self.work: pd.DataFrame | None = None      # werklijst + packshot
         self.rates: dict[tuple[str, str], float] = {}
+        self.scope: set[str] | None = None           # gekozen categorieën (tab 1)
 
         self.info = QLabel("Lees eerst het productbestand in (tab 1). De referentiebestanden "
                            "(attribuuttypes en SAP-mapping) kies je bij Instellingen.")
@@ -141,6 +142,15 @@ class AttributeTab(QWidget):
         elif ref_error:
             self.info.setText(f"⚠️ Referentiebestanden niet geladen: {ref_error}")
 
+    def set_scope(self, categories: list[str] | None):
+        """Categoriekeuze uit tab 1: de boom toont alleen die categorieën."""
+        new = None if categories is None else {c.strip().upper() for c in categories}
+        if new == self.scope:
+            return
+        self.scope = new
+        self.work = None
+        self.refresh_tree()
+
     def update_model_label(self):
         self.lbl_model.setText(f"model: {self.cfg.attribute_model} (detail {self.cfg.attribute_detail})")
 
@@ -148,11 +158,14 @@ class AttributeTab(QWidget):
         return [b.strip() for b in self.brand_edit.text().split(",") if b.strip()] or None
 
     def _filtered_catalog(self) -> pd.DataFrame:
+        cat = self.catalog
+        if self.scope is not None and CATEGORY_COLUMN in cat.columns:
+            cat = cat[cat[CATEGORY_COLUMN].astype(str).str.strip().str.upper().isin(self.scope)]
         brands = self._brands()
-        if not brands or "brand" not in self.catalog.columns:
-            return self.catalog
+        if not brands or "brand" not in cat.columns:
+            return cat
         wanted = {b.casefold() for b in brands}
-        return self.catalog[self.catalog["brand"].astype(str).str.strip().str.casefold().isin(wanted)]
+        return cat[cat["brand"].astype(str).str.strip().str.casefold().isin(wanted)]
 
     def refresh_tree(self):
         if self.catalog is None or self.ref is None:
@@ -165,6 +178,11 @@ class AttributeTab(QWidget):
         cat = self._filtered_catalog()
         self.rates = fill_rates(cat, self.ref)
         self.tree.clear()
+        if cat.empty:
+            ph = QTreeWidgetItem(["(geen producten — kies categorieën in tab 1, stap 2)", "", "", ""])
+            ph.setFlags(Qt.ItemIsEnabled)
+            self.tree.addTopLevelItem(ph)
+            return
         bold = QFont()
         bold.setBold(True)
         counts = cat[CATEGORY_COLUMN].astype(str).value_counts()

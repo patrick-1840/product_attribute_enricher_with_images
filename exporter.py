@@ -73,7 +73,7 @@ def export_excel(cfg: ClassifierConfig, source: Path, target: Path) -> tuple[int
         raise ValueError("Kies een andere bestandsnaam: het originele bestand wordt niet overschreven.")
     store = Store(cfg.db_path)
     try:
-        table = add_effective_columns(store.item_table())
+        table = add_effective_columns(store.item_table(scoped=False))
     finally:
         store.close()
     if table.empty:

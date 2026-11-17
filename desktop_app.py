@@ -4,7 +4,7 @@ Desktop-app (PySide6/Qt) voor de Product Image Classifier.
 Start met:  python desktop_app.py
 
 Structuur:
-  Tab 1 — Data & beelden   : Excel inlezen → packshots downloaden →
+  Tab 1 — Data & beelden   : Excel inlezen → categorieën kiezen → packshots downloaden →
                               (optioneel) beelden classificeren → beeldlabels exporteren
   Tab 2 — Packshot-review  : per product de thumbnails beoordelen met sneltoetsen
                               (alleen nodig in packshot-modus "review")
@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout,
     QGridLayout, QGroupBox, QHBoxLayout, QKeySequenceEdit, QLabel, QLineEdit,
     QMainWindow, QMessageBox, QProgressBar, QPushButton, QScrollArea, QSpinBox,
-    QTabWidget, QVBoxLayout, QWidget,
+    QTabWidget, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
 from config import (
@@ -83,6 +83,8 @@ class MainWindow(QMainWindow):
         self.tabs.currentChanged.connect(self._on_tab_changed)
 
         self.refresh_stats()
+        self.refresh_categories()
+        self.attr_tab.set_scope(self._selected_categories())
         self.statusBar().showMessage(f"Klaar. Logbestand: {LOG_FILE}")
 
     # ------------------------------------------------------------ tab 1
@@ -109,8 +111,33 @@ class MainWindow(QMainWindow):
         gl.addWidget(self.lbl_load, 1, 0, 1, 4)
         lay.addWidget(g)
 
+        # Categorieën kiezen
+        g = QGroupBox("2. Categorieën kiezen — downloaden, classificeren, review en attributen "
+                      "werken alleen op de aangevinkte categorieën")
+        gl = QVBoxLayout(g)
+        self.cat_tree = QTreeWidget()
+        self.cat_tree.setRootIsDecorated(False)
+        self.cat_tree.setHeaderLabels(["Categorie", "Producten", "Packshots gedownload",
+                                       "Alle beelden gedownload", "Geclassificeerd"])
+        self.cat_tree.setColumnWidth(0, 260)
+        self.cat_tree.header().setStretchLastSection(False)
+        for col in range(1, 5):
+            self.cat_tree.setColumnWidth(col, 190)
+        self.cat_tree.setMinimumHeight(170)
+        self.cat_tree.itemChanged.connect(self._on_category_toggled)
+        gl.addWidget(self.cat_tree)
+        row = QHBoxLayout()
+        for text, on in (("Alles aan", True), ("Alles uit", False)):
+            b = QPushButton(text)
+            b.clicked.connect(lambda _=False, on=on: self._check_all_categories(on))
+            row.addWidget(b)
+        self.lbl_scope = QLabel()
+        row.addWidget(self.lbl_scope, 1)
+        gl.addLayout(row)
+        lay.addWidget(g, 1)
+
         # Downloaden
-        self.box_fetch = StepBox("2. Afbeeldingen downloaden (thumbnails in de cachemap)",
+        self.box_fetch = StepBox("3. Afbeeldingen downloaden (thumbnails in de cachemap)",
                                  "Start downloaden")
         self.chk_retry = QCheckBox("mislukte opnieuw proberen")
         self.chk_only_first = QCheckBox("alleen packshots (eerste beeld per product)")
@@ -124,7 +151,7 @@ class MainWindow(QMainWindow):
         lay.addWidget(self.box_fetch)
 
         # Classificeren
-        self.box_cls = StepBox("3. (Optioneel) Beelden classificeren — packshot product / "
+        self.box_cls = StepBox("4. (Optioneel) Beelden classificeren — packshot product / "
                                "verpakking / beide, sfeerbeeld, … — nodig voor packshot-modus 'review'",
                                "Start classificatie")
         self.chk_sim = QCheckBox("simulatiemodus (geen API-kosten)")
@@ -150,9 +177,90 @@ class MainWindow(QMainWindow):
         gl.addWidget(btn_refresh)
         gl.addWidget(btn_export)
         lay.addWidget(g)
-        lay.addStretch()
         self._update_model_label()
         return w
+
+    # --- categoriekeuze
+    def refresh_categories(self):
+        """Vult de categorielijst uit de cache (aantallen + huidige keuze)."""
+        try:
+            from store import Store
+            store = Store(self.cfg.db_path)
+            try:
+                ov, scope = store.category_overview(), store.scope()
+            finally:
+                store.close()
+        except Exception as exc:
+            self.lbl_scope.setText(f"Kon cache niet openen: {exc}")
+            return
+
+        def frac(a, b):
+            return f"{a} / {b}" + (f"  ({a / b:.0%})" if b else "")
+
+        self.cat_tree.blockSignals(True)
+        self.cat_tree.clear()
+        for r in ov.itertuples(index=False):
+            it = QTreeWidgetItem([r.category or "(geen categorie)", str(r.products),
+                                  frac(r.packshots_fetched, r.packshots), frac(r.fetched, r.images),
+                                  frac(r.classified, r.images)])
+            it.setData(0, Qt.UserRole, r.category)
+            it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
+            it.setCheckState(0, Qt.Checked if scope is None or r.category in scope else Qt.Unchecked)
+            for col in range(1, 5):
+                it.setTextAlignment(col, Qt.AlignRight | Qt.AlignVCenter)
+            self.cat_tree.addTopLevelItem(it)
+        self.cat_tree.blockSignals(False)
+        self._update_scope_label(scope)
+        if len(ov) == 1 and not ov["category"].iloc[0] and ov["products"].iloc[0]:
+            self.lbl_scope.setText("<span style='color:#c0392b'>Deze cache kent de categorieën nog "
+                                   "niet — klik <b>Inlezen</b> (stap 1) om ze op te halen. "
+                                   "Downloads en labels blijven bewaard.</span>")
+
+    def _selected_categories(self) -> list[str]:
+        items = [self.cat_tree.topLevelItem(i) for i in range(self.cat_tree.topLevelItemCount())]
+        return [it.data(0, Qt.UserRole) for it in items if it.checkState(0) == Qt.Checked]
+
+    def _check_all_categories(self, on: bool):
+        self.cat_tree.blockSignals(True)
+        for i in range(self.cat_tree.topLevelItemCount()):
+            self.cat_tree.topLevelItem(i).setCheckState(0, Qt.Checked if on else Qt.Unchecked)
+        self.cat_tree.blockSignals(False)
+        self._on_category_toggled()
+
+    def _on_category_toggled(self, *_):
+        if self.worker is not None and self.worker.isRunning():
+            # tijdens een run de keuze niet wijzigen: vinkjes terugzetten
+            QMessageBox.information(self, "Bezig", "Wacht tot de lopende taak klaar is "
+                                    "(of stop ze) voor je de categoriekeuze wijzigt.")
+            self.refresh_categories()
+            return
+        cats = self._selected_categories()
+        from store import Store
+        store = Store(self.cfg.db_path)
+        try:
+            store.set_scope(cats)
+        finally:
+            store.close()
+        self._update_scope_label(cats)
+        self.attr_tab.set_scope(cats)
+        self.refresh_stats()
+
+    def _update_scope_label(self, scope: list[str] | None):
+        if scope is None:
+            txt = "Alle categorieën."
+        elif not scope:
+            txt = ("<span style='color:#c0392b'>Nog geen categorie gekozen — vink aan welke "
+                   "categorieën je wilt verwerken.</span>")
+        else:
+            txt = f"Gekozen: <b>{', '.join(c or '(geen)' for c in scope)}</b>"
+        self.lbl_scope.setText(txt)
+
+    def _scope_empty(self) -> bool:
+        if self.cat_tree.topLevelItemCount() and not self._selected_categories():
+            QMessageBox.information(self, "Geen categorie gekozen",
+                                    "Vink in stap 2 eerst minstens één categorie aan.")
+            return True
+        return False
 
     def _wire_box(self, box: StepBox):
         box.btn_pause.clicked.connect(lambda: self._toggle_pause(box))
@@ -218,6 +326,7 @@ class MainWindow(QMainWindow):
             self.active_box.set_running(False)
         self.btn_load.setEnabled(True)
         self.refresh_stats()
+        self.refresh_categories()
 
     # --- inlezen
     def load_file(self):
@@ -242,6 +351,8 @@ class MainWindow(QMainWindow):
             store = Store(cfg.db_path)
             try:
                 store.replace_items(items, products)
+                if store.scope() is None:
+                    store.set_scope([])     # eerst bewust categorieën kiezen
             finally:
                 store.close()
             # Referentiedata voor de attribuutverrijking; een fout hier blokkeert
@@ -269,13 +380,15 @@ class MainWindow(QMainWindow):
             txt += (f"<br><span style='color:#c0392b'>⚠️ Referentiebestanden niet geladen "
                     f"(attribuutverrijking niet mogelijk): {ref_error}</span>")
         self.lbl_load.setText(txt)
+        self.refresh_categories()
+        self.attr_tab.set_scope(self._selected_categories())
         self.review.reload(keep_position=False)
         self.attr_tab.set_data(catalog, ref, ref_error)
         self.results_tab.reload()
 
     # --- downloaden
     def start_fetch(self):
-        if self._busy():
+        if self._busy() or self._scope_empty():
             return
         cfg, retry, only_first = self.cfg, self.chk_retry.isChecked(), self.chk_only_first.isChecked()
 
@@ -290,7 +403,7 @@ class MainWindow(QMainWindow):
 
     # --- classificeren
     def start_classify(self):
-        if self._busy():
+        if self._busy() or self._scope_empty():
             return
         self.cfg.use_openai = not self.chk_sim.isChecked()
         if self.cfg.use_openai and not self.cfg.openai_api_key:
@@ -332,7 +445,8 @@ class MainWindow(QMainWindow):
             return
         u = max(s["unique_urls"], 1)
         self.lbl_stats.setText(
-            f"<b>{s['products']}</b> producten · <b>{s['items']}</b> beeldverwijzingen · "
+            f"<b>{s['products']}</b> producten in de gekozen categorieën "
+            f"(van {s['products_total']}) · <b>{s['items']}</b> beeldverwijzingen · "
             f"<b>{s['unique_urls']}</b> unieke URL's<br>"
             f"Gedownload: <b>{s['fetched']}</b> ({s['fetched'] / u:.0%}) · mislukt: {s['fetch_failed']}<br>"
             f"Geclassificeerd: <b>{s['classified']}</b> ({s['classified'] / u:.0%}) · "
@@ -372,6 +486,7 @@ class MainWindow(QMainWindow):
             self.results_tab.reload()
         elif i == 0:
             self.refresh_stats()
+            self.refresh_categories()
 
     # ------------------------------------------------------------ tab 3
 
@@ -560,6 +675,8 @@ class MainWindow(QMainWindow):
 
         if Path(self.cfg.cache_dir) != old_cache:
             self.review.reset_store()
+            self.refresh_categories()
+            self.attr_tab.set_scope(self._selected_categories())
         self.review.f_conf.setValue(self.cfg.confidence_threshold)
         self.review.apply_settings()
         self._update_model_label()

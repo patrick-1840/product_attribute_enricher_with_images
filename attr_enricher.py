@@ -53,11 +53,11 @@ def select_packshots(cfg: ClassifierConfig, store: Store) -> pd.DataFrame:
     """Eén packshot per product: kolommen product_id, slot, url, thumb, fetch_status."""
     cols = ["product_id", "slot", "url", "thumb", "fetch_status"]
     if cfg.packshot_mode == "review":
-        t = add_effective_columns(store.item_table())
+        t = add_effective_columns(store.item_table(scoped=False))
         t = t[t["eff_use"] == True]  # noqa: E712  (None = onbekend telt niet)
         t = t.sort_values(["product_id", "position"]).drop_duplicates("product_id")
         return t[cols].reset_index(drop=True)
-    return store.first_images()[cols]
+    return store.first_images(scoped=False)[cols]
 
 
 def attach_packshots(work: pd.DataFrame, packshots: pd.DataFrame) -> pd.DataFrame:

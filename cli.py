@@ -3,6 +3,8 @@ Command-line-variant van dezelfde flow (handig voor testen en lange runs).
 
 Voorbeelden:
     python cli.py load --file "C:/pad/naar/productlijst.xlsx"
+    python cli.py categories                          # overzicht + huidige keuze
+    python cli.py categories --set PERFUME --set MAKE-UP   # alleen deze categorieën
     python cli.py fetch --limit 50
     python cli.py classify --limit 50 --simulate      # testrun zonder API-kosten
     python cli.py classify --model gpt-4o-mini
@@ -40,6 +42,12 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("load", help="Excel inlezen en werklijst opbouwen")
     p.add_argument("--file", help="productbestand (.xlsx/.csv)")
+
+    p = sub.add_parser("categories", help="categorieën tonen en kiezen (downloaden, "
+                                           "classificeren en review werken alleen daarop)")
+    p.add_argument("--set", action="append", metavar="CATEGORIE",
+                   help="mainCategory om te verwerken (meermaals te gebruiken)")
+    p.add_argument("--all", action="store_true", help="keuze wissen = alle categorieën")
 
     p = sub.add_parser("fetch", help="beelden downloaden + thumbnails maken")
     p.add_argument("--limit", type=int)
@@ -98,6 +106,30 @@ def main(argv: list[str] | None = None) -> int:
         print(report.summary())
         print(store.stats())
         store.close()
+
+    elif args.cmd == "categories":
+        from store import Store
+        store = Store(cfg.db_path)
+        try:
+            if args.all:
+                store.set_scope(None)
+            elif args.set:
+                known = set(store.category_overview()["category"])
+                unknown = [c for c in args.set if c.strip().upper() not in known]
+                if unknown:
+                    print(f"Onbekende categorie(ën): {unknown}")
+                    return 1
+                store.set_scope(args.set)
+            scope = store.scope()
+            ov = store.category_overview()
+            print(f"Keuze: {'alle categorieën' if scope is None else ', '.join(scope) or '(geen)'}")
+            for r in ov.itertuples(index=False):
+                mark = "x" if scope is None or r.category in scope else " "
+                print(f" [{mark}] {r.category or '(leeg)':<28} {r.products:>6} producten "
+                      f"{r.images:>7} beelden  packshots {r.packshots_fetched}/{r.packshots}  "
+                      f"gedownload {r.fetched}  geclassificeerd {r.classified}")
+        finally:
+            store.close()
 
     elif args.cmd == "fetch":
         from fetcher import ImageFetcher

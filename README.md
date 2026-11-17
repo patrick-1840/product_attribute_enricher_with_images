@@ -15,39 +15,45 @@ overig, met een snelle review via het toetsenbord.
 
 ## Workflow
 
-**inlezen → packshots downloaden → attributen kiezen → verrijken → controleren → exporteren**
+**inlezen → categorieën kiezen → packshots downloaden → attributen kiezen → verrijken → controleren → exporteren**
 
 1. **Inlezen** (tab 1): kies het productbestand (de wekelijkse productlijst) en
    klik *Inlezen*. Het programma herkent zelf de beeldkolommen
    (`mainImageLink`, `imageLink1`...`5`, of `product image N`) en leest meteen de
    referentiebestanden (attribuuttypes en SAP-mapping, dezelfde als die van de
    attribuutverrijker; je kiest ze bij Instellingen).
-2. **Packshots downloaden**: *Start downloaden* met *alleen packshots* aangevinkt
-   haalt per product het eerste beeld op (de front-foto). Dat zijn ongeveer
-   15.500 beelden. Je kunt pauzeren en stoppen. Wat al binnen is, wordt
-   overgeslagen.
-3. **Attributen kiezen** (tab 3): de boom toont per categorie alleen de
+2. **Categorieën kiezen** (tab 1, stap 2): vink aan met welke productcategorieën
+   (`mainCategory`) je werkt, bv. alleen PERFUME. Per categorie zie je hoeveel
+   producten er zijn en hoeveel beelden al gedownload en geclassificeerd zijn.
+   Downloaden, classificeren, de review en de attribuutboom werken daarna
+   **alleen op die categorieën**. Na de eerste keer inlezen staat er nog niets
+   aangevinkt. De keuze wordt bewaard in de cache. Wat je eerder voor andere
+   categorieën deed, blijft bewaard.
+3. **Packshots downloaden**: *Start downloaden* met *alleen packshots* aangevinkt
+   haalt per product het eerste beeld op (de front-foto). Je kunt pauzeren en
+   stoppen. Wat al binnen is, wordt overgeslagen.
+4. **Attributen kiezen** (tab 3): de boom toont per categorie alleen de
    attributen die volgens de SAP-matrix bij die categorie horen, met de
    vulgraad. Visuele attributen (oog-icoon) staan standaard aan. Klik een
    attribuut aan om rechts de **toegelaten waarden** te zien: alleen die mag het
    model teruggeven. Optioneel kun je een merkfilter zetten en "alleen lege
    waarden" gebruiken. Klik daarna *Werklijst opbouwen*.
-4. **Verrijken**: *Start verrijking*. Per product gaat er één vraag naar het model,
+5. **Verrijken**: *Start verrijking*. Per product gaat er één vraag naar het model,
    met het packshot en alle gekozen attributen samen. Test eerst met de
    **simulatiemodus** en een **limiet** (bv. 20 producten). Elk resultaat wordt
    meteen bewaard.
-5. **Controleren** (tab 4): per rij zie je de gegenereerde waarde, de SAP-code
+6. **Controleren** (tab 4): per rij zie je de gegenereerde waarde, de SAP-code
    en de motivatie, met rechts het packshot en de toegelaten waarden. Pas aan
    door te typen of door een waarde te dubbelklikken (Ctrl+dubbelklik voegt een
    waarde toe bij multi-attributen). Een waarde die niet in de lijst staat, is
    rood en gaat niet mee.
-6. **Exporteren**: *Exporteer Excel...* (zelfde kolommen als de attribuutverrijker,
+7. **Exporteren**: *Exporteer Excel...* (zelfde kolommen als de attribuutverrijker,
    plus de packshot-URL) en *Exporteer impex...* (zelfde impexformaat).
 
 ### Optioneel: beelden classificeren en reviewen
 
 Wil je niet blindelings het eerste beeld als packshot gebruiken? Download dan
-alle beelden, laat ze classificeren (tab 1, stap 3), review ze in tab 2 en zet
+alle beelden van de gekozen categorieën, laat ze classificeren (tab 1, stap 4), review ze in tab 2 en zet
 bij Instellingen *Packshot =* op "eerste beeld met vinkje 'gebruik'". Elk van de
 drie packshot-labels (product, verpakking, beide) krijgt standaard het vinkje.
 Via *Exporteer als...* in tab 1 schrijf je de beeldlabels terug naar het Excel
