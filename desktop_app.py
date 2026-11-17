@@ -34,7 +34,7 @@ from PySide6.QtWidgets import (
 from config import (
     DEFAULT_SHORTCUTS, LOG_FILE, USER_ENV_FILE, ClassifierConfig, save_api_key, setup_logging,
 )
-from qt_common import StepBox, TaskWorker
+from qt_common import SORT_ROLE, SortableTreeItem, StepBox, TaskWorker, enable_sorting
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -125,6 +125,7 @@ class MainWindow(QMainWindow):
             self.cat_tree.setColumnWidth(col, 190)
         self.cat_tree.setMinimumHeight(170)
         self.cat_tree.itemChanged.connect(self._on_category_toggled)
+        enable_sorting(self.cat_tree)
         gl.addWidget(self.cat_tree)
         row = QHBoxLayout()
         for text, on in (("Alles aan", True), ("Alles uit", False)):
@@ -198,17 +199,23 @@ class MainWindow(QMainWindow):
             return f"{a} / {b}" + (f"  ({a / b:.0%})" if b else "")
 
         self.cat_tree.blockSignals(True)
+        self.cat_tree.setSortingEnabled(False)
         self.cat_tree.clear()
         for r in ov.itertuples(index=False):
-            it = QTreeWidgetItem([r.category or "(geen categorie)", str(r.products),
-                                  frac(r.packshots_fetched, r.packshots), frac(r.fetched, r.images),
-                                  frac(r.classified, r.images)])
+            it = SortableTreeItem([r.category or "(geen categorie)", str(r.products),
+                                   frac(r.packshots_fetched, r.packshots), frac(r.fetched, r.images),
+                                   frac(r.classified, r.images)])
+            # sorteren op het aandeel (%) i.p.v. op de teller
+            for col, (a, b) in ((2, (r.packshots_fetched, r.packshots)), (3, (r.fetched, r.images)),
+                                (4, (r.classified, r.images))):
+                it.setData(col, SORT_ROLE, a / b if b else 0.0)
             it.setData(0, Qt.UserRole, r.category)
             it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
             it.setCheckState(0, Qt.Checked if scope is None or r.category in scope else Qt.Unchecked)
             for col in range(1, 5):
                 it.setTextAlignment(col, Qt.AlignRight | Qt.AlignVCenter)
             self.cat_tree.addTopLevelItem(it)
+        self.cat_tree.setSortingEnabled(True)
         self.cat_tree.blockSignals(False)
         self._update_scope_label(scope)
         if len(ov) == 1 and not ov["category"].iloc[0] and ov["products"].iloc[0]:

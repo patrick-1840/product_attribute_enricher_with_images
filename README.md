@@ -42,7 +42,8 @@ overig, met een snelle review via het toetsenbord.
    met het packshot en alle gekozen attributen samen. Test eerst met de
    **simulatiemodus** en een **limiet** (bv. 20 producten). Elk resultaat wordt
    meteen bewaard.
-6. **Controleren** (tab 4): per rij zie je de gegenereerde waarde, de SAP-code
+6. **Controleren** (tab 4). Klik op een kolomkop om te sorteren, nog eens voor
+   aflopend (werkt ook in de categorielijst en de attribuutboom): per rij zie je de gegenereerde waarde, de SAP-code
    en de motivatie, met rechts het packshot en de toegelaten waarden. Pas aan
    door te typen of door een waarde te dubbelklikken (Ctrl+dubbelklik voegt een
    waarde toe bij multi-attributen). Een waarde die niet in de lijst staat, is

@@ -64,7 +64,11 @@ Afhankelijkheidsrichting: `config` ← `store` ← `loader`/`fetcher`/`classifie
   anders slokken filtervelden/tabbalk ze op); PgUp/PgDown/Home/End blijven native.
 - `attribute_tab.py` — tabs "Attributen" (boom + toegelaten waarden + run) en
   "Resultaten" (tabel + packshotvoorbeeld + export).
-- `qt_common.py` — `TaskWorker` (QThread) en `StepBox` (start/pauze/stop).
+- `qt_common.py` — `TaskWorker` (QThread), `StepBox` (start/pauze/stop) en
+  sorteerbare items (`SortableTableItem`/`SortableTreeItem`, `SORT_ROLE`,
+  `enable_sorting`). In de resultatentabel loopt rij → data ALTIJD via
+  `Qt.UserRole` van de cel (`_idx_at`/`_row_of`), nooit via het rijnummer:
+  de tabel kan gesorteerd zijn. Sorteren uitzetten tijdens vullen/bijwerken.
 - `desktop_app.py` — hoofdvenster, 5 tabs; één achtergrondtaak tegelijk.
 - `cli.py` — scriptbare variant van dezelfde flow.
 
