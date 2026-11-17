@@ -155,9 +155,11 @@ VISUAL_ATTRIBUTES = {
 
 # Extra uitleg per attribuut voor het visiemodel (lowercase sleutel).
 VISUAL_HINTS: dict[str, str] = {
-    "colorpackaging": "the dominant colour(s) of the packaging itself (bottle, jar, tube, cap, "
-                      "box). For a transparent bottle, judge the glass/plastic and cap, and use "
-                      "'clear' when the container is transparent.",
+    "colorpackaging": "the 1-2 DOMINANT colours of the packaging surfaces themselves (bottle, "
+                      "jar, tube, cap, box): the colours that cover most of the visible packaging. "
+                      "Ignore printed text, logos, brand names, labels and small decorative details, "
+                      "even when they are bold or large. For a transparent bottle, judge the "
+                      "glass/plastic and cap, and use 'clear' when the container is transparent.",
     "shapeofthebottle": "the overall shape of the bottle/container.",
     "typedispenser": "how the product is dispensed: spray nozzle, pump/flacon, jar, stick or tube.",
     "productformat": "the physical form of the product, only if visible (e.g. compact, stick, "
@@ -260,7 +262,9 @@ class ClassifierConfig:
     escalate: bool = False                  # herclassificeren onder de drempel
     escalation_model: str = "gpt-4o"
     confidence_threshold: float = 0.7       # ook de standaard voor de review-filter
-    prompt: str = DEFAULT_PROMPT
+    # Eigen prompts/uitleg (leeg = standaard uit de code). Bewaard in
+    # settings.json; een verbeterde standaard geldt zo vanzelf voor wie niets aanpaste.
+    custom_prompt: str = ""                 # classificatieprompt
 
     # --- Packshot-keuze voor de attribuutverrijking ---
     # "first"  = het eerste beeld per product is het packshot (geen classificatie nodig)
@@ -278,7 +282,8 @@ class ClassifierConfig:
     attribute_max_tokens: int = 800
     only_empty_values: bool = True
     impex_catalog: str = "Staged"
-    attribute_prompt: str = DEFAULT_ATTRIBUTE_PROMPT
+    custom_attribute_prompt: str = ""
+    attribute_hints: dict[str, str] = field(default_factory=dict)   # attribuut (lowercase) -> uitleg
 
     # --- Review ---
     review_thumb_px: int = 140              # thumbnailgrootte in de reviewlijst
@@ -301,6 +306,21 @@ class ClassifierConfig:
     def failed_log(self) -> Path:
         return Path(self.cache_dir) / "mislukte_urls.csv"
 
+    def active_prompt(self) -> str:
+        """Classificatieprompt: eigen versie of de standaard."""
+        return self.custom_prompt.strip() or DEFAULT_PROMPT
+
+    def active_attribute_prompt(self) -> str:
+        return self.custom_attribute_prompt.strip() or DEFAULT_ATTRIBUTE_PROMPT
+
+    def hint_for(self, attr: str) -> str:
+        """Uitleg voor het model bij dit attribuut: eigen versie of de standaard.
+        Een eigen LEGE uitleg ("-") schakelt de standaarduitleg uit."""
+        own = self.attribute_hints.get(attr.lower())
+        if own is not None and own.strip():
+            return "" if own.strip() == "-" else own.strip()
+        return VISUAL_HINTS.get(attr.lower(), "")
+
     def shortcut(self, action: str) -> str:
         return self.shortcuts.get(action) or DEFAULT_SHORTCUTS[action][1]
 
@@ -308,9 +328,9 @@ class ClassifierConfig:
 
     _PATH_FIELDS = ("product_file", "cache_dir", "last_export_dir",
                     "attribute_types_file", "sap_mapping_file")
-    # Simulatiemodus nooit onthouden; de prompt leeft in de code zodat een
-    # verbeterde standaardprompt niet door een oude settings.json overschaduwd wordt.
-    _SKIP_FIELDS = ("use_openai", "prompt", "attribute_prompt")
+    # Simulatiemodus nooit onthouden. (De standaardprompts leven in de code;
+    # alleen een EIGEN aanpassing gaat naar settings.json, zie custom_*.)
+    _SKIP_FIELDS = ("use_openai",)
 
     def load_user_settings(self, path: Path = USER_SETTINGS_FILE) -> None:
         """Overschrijft velden met wat in settings.json staat (indien aanwezig)."""

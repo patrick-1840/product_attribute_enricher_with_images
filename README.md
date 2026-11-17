@@ -51,6 +51,22 @@ overig, met een snelle review via het toetsenbord.
 7. **Exporteren**: *Exporteer Excel...* (zelfde kolommen als de attribuutverrijker,
    plus de packshot-URL) en *Exporteer impex...* (zelfde impexformaat).
 
+### Prompt en uitleg aanpassen
+
+Met *Prompt en uitleg aanpassen…* (tab Attributen, of bij Instellingen) stuur je
+het model bij:
+
+- **Uitleg per attribuut**: wat het model precies moet bekijken. Voorbeeld voor
+  `colorPackaging`: alleen de 1–2 dominante kleuren van de verpakking, geen
+  gedrukte tekst of logo's (dat is nu ook de standaard). Maak het veld leeg om
+  geen uitleg mee te geven.
+- **Attribuutprompt** en **classificatieprompt**: de volledige instructie.
+- **Voorbeeld**: de prompt zoals hij naar het model gaat.
+
+Alleen wat afwijkt van de standaard wordt bewaard. Met *Standaard herstellen*
+ga je terug. Reeds verwerkte producten veranderen niet: herdoe ze met *ook
+reeds verwerkte opnieuw* (test eerst met een limiet).
+
 ### Optioneel: beelden classificeren en reviewen
 
 Wil je niet blindelings het eerste beeld als packshot gebruiken? Download dan

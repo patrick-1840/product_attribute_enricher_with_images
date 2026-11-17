@@ -15,6 +15,8 @@ beheert (één taak tegelijk, zie ``MainWindow._start``).
 """
 from __future__ import annotations
 
+import html
+
 import logging
 from pathlib import Path
 
@@ -93,6 +95,10 @@ class AttributeTab(QWidget):
         row.addWidget(self.brand_edit)
         b = QPushButton("Toepassen")
         b.clicked.connect(self.refresh_tree)
+        row.addWidget(b)
+        b = QPushButton("Prompt en uitleg aanpassen…")
+        b.setToolTip("De instructie aan het model en de uitleg per attribuut zelf aanpassen")
+        b.clicked.connect(self.edit_prompts)
         row.addWidget(b)
         sl.addLayout(row)
 
@@ -256,10 +262,23 @@ class AttributeTab(QWidget):
             return
         opts = self.ref.options_for(attr)
         rule = "meerdere waarden toegelaten (max 3)" if self.ref.is_multi(attr) else "precies één waarde"
+        hint = self.cfg.hint_for(attr)
+        own = " (eigen)" if self.cfg.attribute_hints.get(attr, "").strip() else ""
+        hint_html = (f"<br><i>Uitleg aan het model{own}:</i> {html.escape(hint)}" if hint else
+                     "<br><i>Geen extra uitleg aan het model.</i>")
         self.options_title.setText(f"<b>Toegelaten waarden — {self.ref.display_name(attr)}</b><br>"
                                    f"<span style='color:#888'>{len(opts)} waarden · {rule}. "
-                                   f"Het model mag ALLEEN deze waarden teruggeven.</span>")
+                                   f"Het model mag ALLEEN deze waarden teruggeven.{hint_html}</span>")
         self.options.addItems(opts)
+
+    def edit_prompts(self, initial_attr: str | None = None):
+        from prompt_dialog import PromptDialog
+        item = self.tree.currentItem()
+        if initial_attr is None and item is not None and item.parent() is not None:
+            initial_attr = item.data(0, Qt.UserRole)
+        dlg = PromptDialog(self.cfg, self.ref, self._selection(), initial_attr, self)
+        if dlg.exec():
+            self._show_options(self.tree.currentItem())
 
     # ------------------------------------------------------------ werklijst
 

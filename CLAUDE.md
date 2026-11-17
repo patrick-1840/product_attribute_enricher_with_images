@@ -64,6 +64,11 @@ Afhankelijkheidsrichting: `config` ← `store` ← `loader`/`fetcher`/`classifie
   anders slokken filtervelden/tabbalk ze op); PgUp/PgDown/Home/End blijven native.
 - `attribute_tab.py` — tabs "Attributen" (boom + toegelaten waarden + run) en
   "Resultaten" (tabel + packshotvoorbeeld + export).
+- `prompt_dialog.py` — venster om prompts en uitleg per attribuut aan te passen.
+  Gebruik ALTIJD `cfg.active_prompt()`, `cfg.active_attribute_prompt()` en
+  `cfg.hint_for(attr)`; de standaarden (`DEFAULT_*`, `VISUAL_HINTS`) staan in
+  de code, alleen afwijkingen (`custom_*`, `attribute_hints`; `"-"` = geen
+  uitleg) gaan naar settings.json.
 - `qt_common.py` — `TaskWorker` (QThread), `StepBox` (start/pauze/stop) en
   sorteerbare items (`SortableTableItem`/`SortableTreeItem`, `SORT_ROLE`,
   `enable_sorting`). In de resultatentabel loopt rij → data ALTIJD via
