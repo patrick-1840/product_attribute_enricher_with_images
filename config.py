@@ -103,19 +103,101 @@ def save_api_key(key: str) -> None:
 
 # ------------------------------------------------------------------ labels
 
-LABELS = ["packshot", "sfeerbeeld", "swatch", "tekst", "overig"]
-USE_LABEL = "packshot"   # label dat standaard "gebruik voor attributie" aanvinkt
+# Drie soorten packshots: alleen het product, alleen de verpakking (doos), of
+# beide samen. Dat onderscheid bepaalt mee welk beeld geschikt is voor welk
+# attribuut (bv. flesvorm vs. kleur van de verpakking).
+PACKSHOT_LABELS = ["packshot_product", "packshot_verpakking", "packshot_beide"]
+LABELS = [*PACKSHOT_LABELS, "sfeerbeeld", "swatch", "tekst", "overig"]
+# Labels die standaard "gebruik voor attributie" aanvinken. "packshot" staat er
+# voor oude resultaten (vóór de opsplitsing) nog bij.
+USE_LABELS = {*PACKSHOT_LABELS, "packshot"}
+
+
+def is_use_label(label) -> bool:
+    return isinstance(label, str) and label in USE_LABELS
 
 DEFAULT_PROMPT = """Classify this e-commerce product image from a beauty/perfume webshop.
 
 Labels:
-- packshot: the product (bottle, jar, tube, box, palette...) clearly shown on a plain/neutral background, front, side or back view. Product + its box together also counts.
+- packshot_product: ONLY the product itself (bottle, jar, tube, compact, palette...) on a plain/neutral background, front, side or back view. No outer box.
+- packshot_verpakking: ONLY the outer packaging/box (or gift box) on a plain background, without the product itself visible next to it.
+- packshot_beide: the product AND its outer packaging/box together on a plain background.
 - sfeerbeeld: lifestyle/mood image: model, hands, decor, scenery, props, or product in a styled setting.
 - swatch: colour/texture sample (smear, drop, swatch on skin, texture close-up) or colour chip.
 - tekst: image dominated by text, icons, infographic, ingredient list, claims or instructions.
 - overig: anything else (logo, empty/broken image, multiple different products, gift set overview...).
 
-Answer ONLY with JSON: {"label": "<one of: packshot|sfeerbeeld|swatch|tekst|overig>", "confidence": <0.0-1.0>}"""
+Answer ONLY with JSON: {"label": "<one of: packshot_product|packshot_verpakking|packshot_beide|sfeerbeeld|swatch|tekst|overig>", "confidence": <0.0-1.0>}"""
+
+# ------------------------------------------------------------------ attributen
+
+# mainCategory in de productlijst -> kolommen in de categorie/attribuutmatrix van
+# de SAP-mapping. Gekopieerd uit de Product Attribute Enricher (houd in sync).
+DEFAULT_CATEGORY_MAPPING: dict[str, list[str]] = {
+    "PERFUME": ["Parfum"],
+    "HAIR CARE": ["Haar"],
+    "SKINCARE": ["Lichaam", "Gezicht"],
+    "MAKE-UP": ["Make-up"],
+    "SUNSCREEN": ["Lichaam", "Gezicht"],
+    "BATH & BODY": ["Body"],
+    "HOME ACCESSORIES": ["Home"],
+    "HOME": ["Home"],
+}
+
+# Attributen die je op een packshot kan ZIEN. Deze staan in de attribuutboom
+# standaard aangevinkt; andere attributen kunnen wel, maar staan uit.
+VISUAL_ATTRIBUTES = {
+    "colorpackaging", "shapeofthebottle", "typedispenser", "productformat",
+}
+
+# Extra uitleg per attribuut voor het visiemodel (lowercase sleutel).
+VISUAL_HINTS: dict[str, str] = {
+    "colorpackaging": "the dominant colour(s) of the packaging itself (bottle, jar, tube, cap, "
+                      "box). For a transparent bottle, judge the glass/plastic and cap, and use "
+                      "'clear' when the container is transparent.",
+    "shapeofthebottle": "the overall shape of the bottle/container.",
+    "typedispenser": "how the product is dispensed: spray nozzle, pump/flacon, jar, stick or tube.",
+    "productformat": "the physical form of the product, only if visible (e.g. compact, stick, "
+                     "liquid in a dropper bottle).",
+}
+
+# Attributen waarvoor meerdere waarden mogen (aangevuld met 'multi' uit het
+# attribuuttypes-bestand), zoals in de attribuutverrijker.
+MULTI_VALUE_HINT_ATTRIBUTES = {"colorpackaging"}
+
+DEFAULT_ATTRIBUTE_PROMPT = """You are a precise product data assistant for a beauty and perfume webshop.
+Look at the product image (a packshot) and determine the attributes below.
+
+Product: {brand} - {product_name}
+
+Attributes:
+{attribute_block}
+
+Rules:
+- Base your answer ONLY on what is visible in the image.
+- Only choose from the listed options, spelled exactly as given.
+- For attributes marked "multiple allowed", return up to 3 options as a comma-separated string.
+- If an attribute cannot be determined from the image, set "choice" to null.
+- Give a brief motivation (max 1 sentence) per attribute.
+
+Answer ONLY with JSON, one key per attribute name exactly as listed:
+{{"<attribute>": {{"choice": "<option>" or null, "motivation": "..."}}, ...}}"""
+
+
+def _enricher_setting(key: str) -> Path | None:
+    """Neemt een bronbestandpad over uit de instellingen van de Product Attribute
+    Enricher (%APPDATA%/AttributeEnricher/settings.json), als die bestaat."""
+    path = USER_DIR.parent / "AttributeEnricher" / "settings.json"
+    try:
+        value = json.loads(path.read_text(encoding="utf-8")).get(key)
+    except (OSError, json.JSONDecodeError):
+        return None
+    return Path(value) if value else None
+
+
+def _default_ref_file(key: str, name: str) -> Path:
+    return _enricher_setting(key) or BASE_DIR / "sources" / name
+
 
 # ------------------------------------------------------------------ sneltoetsen
 
@@ -175,6 +257,24 @@ class ClassifierConfig:
     confidence_threshold: float = 0.7       # ook de standaard voor de review-filter
     prompt: str = DEFAULT_PROMPT
 
+    # --- Packshot-keuze voor de attribuutverrijking ---
+    # "first"  = het eerste beeld per product is het packshot (geen classificatie nodig)
+    # "review" = het eerste beeld met vinkje "gebruik" (voorstel of review)
+    packshot_mode: str = "first"
+    only_fetch_packshots: bool = True       # bij "first": alleen dat ene beeld downloaden
+
+    # --- Attribuutverrijking ---
+    attribute_types_file: Path = field(default_factory=lambda: _default_ref_file(
+        "attribute_types_file", "attributen - single or double.xlsx"))
+    sap_mapping_file: Path = field(default_factory=lambda: _default_ref_file(
+        "sap_mapping_file", "sap_commerce_product_attributes.xlsx"))
+    attribute_model: str = "gpt-4o"
+    attribute_detail: str = "low"           # "low" (goedkoop) of "high" (fijnere details)
+    attribute_max_tokens: int = 800
+    only_empty_values: bool = True
+    impex_catalog: str = "Staged"
+    attribute_prompt: str = DEFAULT_ATTRIBUTE_PROMPT
+
     # --- Review ---
     layout_orientation: str = "horizontal"  # "horizontal" | "vertical"
     shortcuts: dict[str, str] = field(
@@ -201,10 +301,11 @@ class ClassifierConfig:
 
     # -------------------------------------------------------- user settings
 
-    _PATH_FIELDS = ("product_file", "cache_dir", "last_export_dir")
+    _PATH_FIELDS = ("product_file", "cache_dir", "last_export_dir",
+                    "attribute_types_file", "sap_mapping_file")
     # Simulatiemodus nooit onthouden; de prompt leeft in de code zodat een
     # verbeterde standaardprompt niet door een oude settings.json overschaduwd wordt.
-    _SKIP_FIELDS = ("use_openai", "prompt")
+    _SKIP_FIELDS = ("use_openai", "prompt", "attribute_prompt")
 
     def load_user_settings(self, path: Path = USER_SETTINGS_FILE) -> None:
         """Overschrijft velden met wat in settings.json staat (indien aanwezig)."""

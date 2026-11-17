@@ -8,7 +8,8 @@ Kolomnamen: ``image N label`` / ``image N use`` voor genummerde slots, en
 
 Effectief label en vinkje per beeld (ook gebruikt door de review-GUI):
 - gereviewd  → het label en vinkje uit de review;
-- niet gereviewd → het voorgestelde label; vinkje aan als het een packshot is.
+- niet gereviewd → het voorgestelde label; vinkje aan bij elk packshot-label
+  (product, verpakking of beide).
 - deny zonder nieuw label → label ``onbekend``, vinkje uit (tenzij manueel aangezet).
 
 Het originele bestand wordt NOOIT overschreven; de gebruiker kiest via
@@ -22,7 +23,7 @@ from pathlib import Path
 import pandas as pd
 from openpyxl import load_workbook
 
-from config import USE_LABEL, ClassifierConfig
+from config import ClassifierConfig, is_use_label
 from store import Store
 
 logger = logging.getLogger(__name__)
@@ -48,7 +49,7 @@ def effective_use(row) -> bool | None:
         return bool(row.get("review_use"))
     if not isinstance(row.get("label"), str):
         return None
-    return row.get("label") == USE_LABEL
+    return is_use_label(row.get("label"))
 
 
 def add_effective_columns(table: pd.DataFrame) -> pd.DataFrame:
@@ -141,7 +142,7 @@ def export_corrections(table: pd.DataFrame, path: Path) -> int:
     if rv.empty:
         pd.DataFrame(columns=["product_id"]).to_csv(path, index=False, encoding="utf-8-sig")
         return 0
-    rv["voorgesteld_use"] = rv["label"] == USE_LABEL
+    rv["voorgesteld_use"] = rv["label"].map(is_use_label)
     rv["gecorrigeerd"] = (rv["eff_label"] != rv["label"]) | (rv["eff_use"] != rv["voorgesteld_use"])
     out = rv.rename(columns={
         "label": "voorgesteld_label", "confidence": "voorgesteld_confidence",
