@@ -26,6 +26,7 @@ geen absolute paden, niet schrijven naast de .exe.
 pip install -r requirements.txt
 python desktop_app.py                                   # desktop-UI
 python cli.py load --file "pad/naar/productlijst.xlsx"  # werklijst opbouwen
+python cli.py categories --set PERFUME                  # alleen deze categorie(ën) verwerken
 python cli.py fetch --limit 50                          # downloaden + thumbnails
 python cli.py classify --limit 50 --simulate            # testrun zonder API-kosten
 python cli.py stats
@@ -90,6 +91,13 @@ Afhankelijkheidsrichting: `config` ← `store` ← `loader`/`fetcher`/`classifie
   geen voorstel en geen review → lege cellen. Logica in `exporter.effective_*`
   en gespiegeld in `ReviewWidget._save` — houd die twee in sync.
 - Reviews gelden alleen zolang de URL in dat slot dezelfde is (join op URL).
+- Categoriekeuze (`scope`-tabel, `products.category` = `mainCategory` in
+  hoofdletters): `urls_to_fetch`, `urls_to_classify`, `item_table()`,
+  `first_images()` en `stats()` filteren via `Store._IN_SCOPE`. Geen
+  `meta.scope_active` = alles (CLI-standaard); de desktop-app zet bij de eerste
+  keer inlezen een lege keuze, zodat de gebruiker eerst categorieën kiest.
+  De Excel-export en de packshotkeuze voor attributen gebruiken `scoped=False`
+  (de werklijst beperkt zelf al tot categorieën).
 
 ## Conventies
 

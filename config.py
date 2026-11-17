@@ -133,6 +133,9 @@ Answer ONLY with JSON: {"label": "<one of: packshot_product|packshot_verpakking|
 
 # mainCategory in de productlijst -> kolommen in de categorie/attribuutmatrix van
 # de SAP-mapping. Gekopieerd uit de Product Attribute Enricher (houd in sync).
+# Kolom met de productcategorie (categoriekeuze en attribuutmatrix).
+CATEGORY_COLUMN = "mainCategory"
+
 DEFAULT_CATEGORY_MAPPING: dict[str, list[str]] = {
     "PERFUME": ["Parfum"],
     "HAIR CARE": ["Haar"],
