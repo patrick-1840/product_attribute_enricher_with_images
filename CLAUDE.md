@@ -25,6 +25,7 @@ geen absolute paden, niet schrijven naast de .exe.
 ```bash
 pip install -r requirements.txt
 python desktop_app.py                                   # desktop-UI
+python attribute_viewer.py                              # apart programma: attribuutoverzicht
 python cli.py load --file "pad/naar/productlijst.xlsx"  # werklijst opbouwen
 python cli.py categories --set PERFUME                  # alleen deze categorie(ën) verwerken
 python cli.py fetch --limit 50                          # downloaden + thumbnails
@@ -82,6 +83,12 @@ Afhankelijkheidsrichting: `config` ← `store` ← `loader`/`fetcher`/`classifie
   "confidence" werkt nog, maar dan blijft de kolom leeg.
 - `desktop_app.py` — hoofdvenster, 5 tabs; één achtergrondtaak tegelijk.
 - `cli.py` — scriptbare variant van dezelfde flow.
+- `attribute_viewer.py` — **apart programma** "Attribuutoverzicht" (eigen .exe in
+  dezelfde build): categorie + attribuut kiezen en door alle producten scrollen
+  (foto, merk, naam, waarde, omschrijving) ter visuele validatie. Alleen-lezen.
+  Deelt instellingen, referentiebestanden en de thumbnailcache; ontbrekende
+  foto's worden lazy gedownload voor zichtbare rijen. Het ingelezen Excel wordt
+  gecachet als `viewer_catalog.pkl` in de cachemap (sleutel: pad + mtime + grootte).
 
 ## Datamodel (belangrijk)
 

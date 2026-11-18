@@ -112,6 +112,19 @@ de keuze van het packshot telt alleen als *Packshot =* bij Instellingen op
 "eerste beeld met vinkje 'gebruik'" staat. In de modus "eerste beeld" wordt
 altijd het eerste beeld gebruikt.
 
+## Apart programma: Attribuutoverzicht
+
+`Attribuutoverzicht.exe` (in dezelfde map; ontwikkelaars: `python attribute_viewer.py`)
+is een compact overzicht om duizenden producten snel visueel te valideren. Kies
+bovenaan een **categorie**, een **productattribuut** en eventueel een **waarde**
+(of *(leeg)* / *(gevuld)*), en scroll door alle producten met foto, merk, naam,
+de attribuutwaarde en de productomschrijving. Zoeken op merk/naam/variant,
+sorteren op waarde/merk/naam en de fotogrootte instellen kan in dezelfde balk.
+Dubbelklik opent de productpagina; Ctrl+C kopieert de geselecteerde rijen (om
+fouten door te geven). Het programma wijzigt niets. De eerste keer inlezen duurt
+even; daarna start het uit de cache in een paar seconden. Foto's die nog niet in
+de cache zitten, worden gedownload zodra ze in beeld komen.
+
 ## Instellingen (tab 3)
 
 API-key, model, aantal gelijktijdige calls, escalatiemodel, confidence-drempel,

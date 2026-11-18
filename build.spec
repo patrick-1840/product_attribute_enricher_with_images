@@ -5,7 +5,9 @@ PyInstaller-specificatie voor de Product Image Classifier desktop-app.
 Bouwen: dubbelklik de snelkoppeling "Compileer build" (zie build.ps1), of
 handmatig: `pyinstaller build.spec --noconfirm`.
 
-Resultaat: dist/ProductImageClassifier/ (een map, geen los .exe-bestand — dat is
+Resultaat: dist/ProductImageClassifier/ met twee programma's die dezelfde
+bibliotheken delen: ProductImageClassifier.exe en Attribuutoverzicht.exe
+(attribute_viewer.py). Een map, geen los .exe-bestand — dat is
 bewuste keuze, zie CLAUDE.md "Distributie"). Deel die hele map (bv. als
 .zip, gemaakt door build.ps1) met collega's. Zij vullen hun OpenAI API-key
 in via Instellingen (bewaard in %APPDATA%/ProductImageClassifier/.env) of
@@ -42,6 +44,39 @@ a = Analysis(
 )
 pyz = PYZ(a.pure)
 
+# Tweede programma: Attribuutoverzicht (zelfde afhankelijkheden, eigen .exe)
+v = Analysis(
+    ['attribute_viewer.py'],
+    pathex=[],
+    binaries=[],
+    datas=[],
+    hiddenimports=[],
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=['matplotlib', 'numba', 'llvmlite', 'tkinter', 'pytest', 'openai'],
+    noarchive=False,
+)
+vpyz = PYZ(v.pure)
+viewer_exe = EXE(
+    vpyz,
+    v.scripts,
+    [],
+    exclude_binaries=True,
+    name='Attribuutoverzicht',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=False,
+    console=False,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+    icon='favicon/favicon.ico',
+)
+
 exe = EXE(
     pyz,
     a.scripts,
@@ -64,6 +99,9 @@ coll = COLLECT(
     exe,
     a.binaries,
     a.datas,
+    viewer_exe,
+    v.binaries,
+    v.datas,
     strip=False,
     upx=False,
     upx_exclude=[],
