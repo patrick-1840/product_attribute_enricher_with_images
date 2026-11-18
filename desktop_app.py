@@ -32,7 +32,7 @@ from PySide6.QtWidgets import (
 )
 
 from config import (
-    DEFAULT_SHORTCUTS, LOG_FILE, USER_ENV_FILE, ClassifierConfig, save_api_key, setup_logging,
+    APP_TITLE, APP_VERSION, DEFAULT_SHORTCUTS, LOG_FILE, USER_ENV_FILE, ClassifierConfig, save_api_key, setup_logging,
 )
 from qt_common import SORT_ROLE, SortableTreeItem, StepBox, TaskWorker, enable_sorting
 
@@ -49,24 +49,29 @@ def _resource_dir() -> Path:
 # ================================================================= main window
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, progress=None):
+        """``progress(pct, tekst)``: optionele callback voor de laadbalk van het opstartscherm."""
         super().__init__()
-        self.setWindowTitle("Product Image Classifier")
+        step = progress or (lambda pct, msg: None)
+        self.setWindowTitle(f"{APP_TITLE} {APP_VERSION}")
         self.resize(1400, 860)
         icon_path = _resource_dir() / "favicon" / "favicon.ico"
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
 
+        step(10, "Instellingen laden…")
         self.cfg = ClassifierConfig()
         self.cfg.load_user_settings()
         self.worker: TaskWorker | None = None
         self.active_box: StepBox | None = None
 
+        step(20, "Modules laden…")
         from review_widget import ReviewWidget   # pas na QApplication/PySide6 laden
         self.review = ReviewWidget(self.cfg)
         self.review.status_message.connect(lambda m: self.statusBar().showMessage(m, 6000))
         self.review.export_requested.connect(self.export)
 
+        step(50, "Tabs opbouwen…")
         from attribute_tab import AttributeTab, ResultsTab
         self.attr_tab = AttributeTab(self.cfg, self)
         self.results_tab = ResultsTab(self.cfg, self.attr_tab, self)
@@ -82,10 +87,12 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.settings_tab, "5 · Instellingen")
         self.tabs.currentChanged.connect(self._on_tab_changed)
 
+        step(80, "Cache openen…")
         self.refresh_stats()
         self.refresh_categories()
         self.attr_tab.set_scope(self._selected_categories())
-        self.statusBar().showMessage(f"Klaar. Logbestand: {LOG_FILE}")
+        step(100, "Klaar")
+        self.statusBar().showMessage(f"Klaar. Versie {APP_VERSION} · logbestand: {LOG_FILE}")
 
     # ------------------------------------------------------------ tab 1
 
@@ -769,8 +776,14 @@ def main():
     icon_path = _resource_dir() / "favicon" / "favicon.ico"
     if icon_path.exists():
         app.setWindowIcon(QIcon(str(icon_path)))
-    window = MainWindow()
+    from splash import SplashScreen
+    splash = SplashScreen(_resource_dir() / "favicon" / "icon.png")
+    splash.show()
+    splash.step(5, "Opstarten…")
+    logger.info("%s %s gestart", APP_TITLE, APP_VERSION)
+    window = MainWindow(progress=splash.step)
     window.show()
+    splash.finish(window)
     sys.exit(app.exec())
 
 

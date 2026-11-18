@@ -160,6 +160,9 @@ pushen doet de gebruiker zelf.
 
 ## Distributie
 
+Versienummer: `APP_VERSION` in `config.py` (opstartscherm, venstertitel, log,
+zipnaam). Verhoog het bij elke release naar `main` en tag dezelfde versie (`vX.Y.Z`).
+
 PyInstaller-**map** (geen losse .exe), als .zip: `build.ps1` of
 `pyinstaller build.spec --noconfirm`. `BASE_DIR` in `config.py` gebruikt
 `sys.executable` zodra `sys.frozen` waar is — **niet terugdraaien**.
