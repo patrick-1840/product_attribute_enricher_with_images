@@ -3,7 +3,7 @@
 # Doet alles wat nodig is voor een nieuwe compilatie:
 #   1. installeert/actualiseert de runtime- en build-afhankelijkheden
 #   2. bouwt dist/ProductImageClassifier/ met PyInstaller (build.spec)
-#   3. zipt die map naar ProductImageClassifier-<datum>.zip in dist/
+#   3. zipt die map naar ProductImageClassifier-<versie>-<datum>.zip in dist/
 #
 # Wordt aangeroepen via de snelkoppeling "Compileer build" op het bureaublad,
 # of handmatig: powershell -ExecutionPolicy Bypass -File build.ps1
@@ -25,7 +25,8 @@ Write-Host "`n[3/3] Inpakken als .zip..." -ForegroundColor Cyan
 $distDir = Join-Path $PSScriptRoot "dist\ProductImageClassifier"
 if (-not (Test-Path $distDir)) { throw "Verwachte map niet gevonden: $distDir" }
 $stamp = Get-Date -Format "yyyy-MM-dd"
-$zipPath = Join-Path $PSScriptRoot "dist\ProductImageClassifier-$stamp.zip"
+$version = (Select-String -Path (Join-Path $PSScriptRoot "config.py") -Pattern '^APP_VERSION = "(.+)"').Matches[0].Groups[1].Value
+$zipPath = Join-Path $PSScriptRoot "dist\ProductImageClassifier-$version-$stamp.zip"
 if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
 Compress-Archive -Path "$distDir\*" -DestinationPath $zipPath
 

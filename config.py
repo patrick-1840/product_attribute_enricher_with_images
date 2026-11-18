@@ -24,6 +24,10 @@ from dotenv import load_dotenv, set_key
 logger = logging.getLogger(__name__)
 
 APP_NAME = "ProductImageClassifier"
+APP_TITLE = "Product Image Classifier"
+# Versienummer (splash, venstertitel, log, zipnaam). Verhoog bij elke release
+# naar main en tag dezelfde versie in git (vX.Y.Z).
+APP_VERSION = "0.3.0"
 
 
 def _app_dir() -> Path:
